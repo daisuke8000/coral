@@ -1,0 +1,12 @@
+syntax = "proto3";
+package payment.v1;
+import "user/v1/user.proto";
+
+service PaymentService {
+  rpc Pay (PayRequest) returns (PayResponse);
+}
+message PayRequest { string user_id = 1; }
+message PayResponse {
+  bool success = 1;
+  user.v1.GetUserResponse user_info = 2;
+}
