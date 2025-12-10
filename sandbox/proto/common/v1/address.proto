@@ -1,0 +1,18 @@
+syntax = "proto3";
+package common.v1;
+
+// 住所を表す共通型
+message Address {
+  string country = 1;
+  string postal_code = 2;
+  string prefecture = 3;    // 都道府県
+  string city = 4;          // 市区町村
+  string street = 5;        // 番地
+  string building = 6;      // 建物名・部屋番号
+}
+
+// 座標（配送最適化用）
+message GeoLocation {
+  double latitude = 1;
+  double longitude = 2;
+}

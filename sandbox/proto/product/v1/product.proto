@@ -1,0 +1,51 @@
+syntax = "proto3";
+package product.v1;
+
+import "common/v1/money.proto";
+import "google/protobuf/timestamp.proto";
+
+service ProductService {
+  rpc GetProduct(GetProductRequest) returns (GetProductResponse);
+  rpc ListProducts(ListProductsRequest) returns (ListProductsResponse);
+  rpc SearchProducts(SearchProductsRequest) returns (SearchProductsResponse);
+}
+
+message Product {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  common.v1.Money price = 4;
+  int32 stock_quantity = 5;
+  repeated string category_ids = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
+}
+
+message GetProductRequest {
+  string id = 1;
+}
+
+message GetProductResponse {
+  Product product = 1;
+}
+
+message ListProductsRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+}
+
+message ListProductsResponse {
+  repeated Product products = 1;
+  string next_page_token = 2;
+}
+
+message SearchProductsRequest {
+  string query = 1;
+  common.v1.PriceRange price_range = 2;
+  repeated string category_ids = 3;
+}
+
+message SearchProductsResponse {
+  repeated Product products = 1;
+  int32 total_count = 2;
+}

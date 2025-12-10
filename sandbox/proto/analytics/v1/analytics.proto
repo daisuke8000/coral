@@ -1,0 +1,98 @@
+syntax = "proto3";
+package analytics.v1;
+
+import "user/v1/user.proto";
+import "product/v1/product.proto";
+import "order/v1/order.proto";
+import "common/v1/money.proto";
+import "google/protobuf/timestamp.proto";
+
+service AnalyticsService {
+  rpc GetUserAnalytics(GetUserAnalyticsRequest) returns (GetUserAnalyticsResponse);
+  rpc GetProductAnalytics(GetProductAnalyticsRequest) returns (GetProductAnalyticsResponse);
+  rpc GetSalesReport(GetSalesReportRequest) returns (GetSalesReportResponse);
+  rpc GetDashboard(GetDashboardRequest) returns (GetDashboardResponse);
+}
+
+message TimeRange {
+  google.protobuf.Timestamp start = 1;
+  google.protobuf.Timestamp end = 2;
+}
+
+message UserAnalytics {
+  string user_id = 1;
+  int32 total_orders = 2;
+  common.v1.Money total_spent = 3;
+  common.v1.Money average_order_value = 4;
+  google.protobuf.Timestamp first_order_at = 5;
+  google.protobuf.Timestamp last_order_at = 6;
+  repeated string favorite_categories = 7;
+}
+
+message ProductAnalytics {
+  string product_id = 1;
+  int32 total_sold = 2;
+  common.v1.Money total_revenue = 3;
+  double conversion_rate = 4;
+  int32 view_count = 5;
+  int32 cart_add_count = 6;
+}
+
+message SalesMetric {
+  google.protobuf.Timestamp date = 1;
+  int32 order_count = 2;
+  common.v1.Money revenue = 3;
+  int32 new_customers = 4;
+}
+
+message GetUserAnalyticsRequest {
+  string user_id = 1;
+  TimeRange time_range = 2;
+}
+
+message GetUserAnalyticsResponse {
+  UserAnalytics analytics = 1;
+  repeated order.v1.Order recent_orders = 2;
+}
+
+message GetProductAnalyticsRequest {
+  string product_id = 1;
+  TimeRange time_range = 2;
+}
+
+message GetProductAnalyticsResponse {
+  ProductAnalytics analytics = 1;
+  product.v1.Product product = 2;
+}
+
+message GetSalesReportRequest {
+  TimeRange time_range = 1;
+  string group_by = 2;  // "day", "week", "month"
+}
+
+message GetSalesReportResponse {
+  repeated SalesMetric metrics = 1;
+  common.v1.Money total_revenue = 2;
+  int32 total_orders = 3;
+}
+
+message GetDashboardRequest {
+  TimeRange time_range = 1;
+}
+
+message GetDashboardResponse {
+  // サマリー
+  common.v1.Money total_revenue = 1;
+  int32 total_orders = 2;
+  int32 total_customers = 3;
+  double average_order_value = 4;
+
+  // トップ商品
+  repeated ProductAnalytics top_products = 5;
+
+  // 最近の注文
+  repeated order.v1.Order recent_orders = 6;
+
+  // 時系列データ
+  repeated SalesMetric sales_trend = 7;
+}

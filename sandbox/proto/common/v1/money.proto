@@ -1,0 +1,14 @@
+syntax = "proto3";
+package common.v1;
+
+// 金額を表す共通型
+message Money {
+  int64 amount = 1;           // 金額（最小単位、例: 円、セント）
+  string currency_code = 2;   // 通貨コード（ISO 4217）
+}
+
+// 価格範囲
+message PriceRange {
+  Money min = 1;
+  Money max = 2;
+}

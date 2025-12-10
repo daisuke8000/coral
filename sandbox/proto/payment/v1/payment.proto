@@ -1,12 +1,74 @@
 syntax = "proto3";
 package payment.v1;
+
 import "user/v1/user.proto";
+import "common/v1/money.proto";
+import "google/protobuf/timestamp.proto";
 
 service PaymentService {
-  rpc Pay (PayRequest) returns (PayResponse);
+  rpc Pay(PayRequest) returns (PayResponse);
+  rpc Refund(RefundRequest) returns (RefundResponse);
+  rpc GetPaymentHistory(GetPaymentHistoryRequest) returns (GetPaymentHistoryResponse);
 }
-message PayRequest { string user_id = 1; }
+
+enum PaymentStatus {
+  PAYMENT_STATUS_UNSPECIFIED = 0;
+  PAYMENT_STATUS_PENDING = 1;
+  PAYMENT_STATUS_COMPLETED = 2;
+  PAYMENT_STATUS_FAILED = 3;
+  PAYMENT_STATUS_REFUNDED = 4;
+}
+
+enum PaymentMethod {
+  PAYMENT_METHOD_UNSPECIFIED = 0;
+  PAYMENT_METHOD_CREDIT_CARD = 1;
+  PAYMENT_METHOD_BANK_TRANSFER = 2;
+  PAYMENT_METHOD_CONVENIENCE_STORE = 3;
+  PAYMENT_METHOD_DIGITAL_WALLET = 4;
+}
+
+message Payment {
+  string id = 1;
+  string user_id = 2;
+  string order_id = 3;
+  common.v1.Money amount = 4;
+  PaymentMethod method = 5;
+  PaymentStatus status = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp completed_at = 8;
+}
+
+message PayRequest {
+  string user_id = 1;
+  string order_id = 2;
+  common.v1.Money amount = 3;
+  PaymentMethod method = 4;
+}
+
 message PayResponse {
   bool success = 1;
-  user.v1.GetUserResponse user_info = 2;
+  Payment payment = 2;
+  user.v1.GetUserResponse user_info = 3;
+}
+
+message RefundRequest {
+  string payment_id = 1;
+  common.v1.Money amount = 2;
+  string reason = 3;
+}
+
+message RefundResponse {
+  bool success = 1;
+  Payment payment = 2;
+}
+
+message GetPaymentHistoryRequest {
+  string user_id = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+message GetPaymentHistoryResponse {
+  repeated Payment payments = 1;
+  string next_page_token = 2;
 }

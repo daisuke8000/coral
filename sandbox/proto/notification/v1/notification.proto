@@ -1,0 +1,79 @@
+syntax = "proto3";
+package notification.v1;
+
+import "user/v1/user.proto";
+import "order/v1/order.proto";
+import "google/protobuf/timestamp.proto";
+
+service NotificationService {
+  rpc SendNotification(SendNotificationRequest) returns (SendNotificationResponse);
+  rpc ListNotifications(ListNotificationsRequest) returns (ListNotificationsResponse);
+  rpc MarkAsRead(MarkAsReadRequest) returns (MarkAsReadResponse);
+}
+
+enum NotificationType {
+  NOTIFICATION_TYPE_UNSPECIFIED = 0;
+  NOTIFICATION_TYPE_ORDER_CREATED = 1;
+  NOTIFICATION_TYPE_ORDER_SHIPPED = 2;
+  NOTIFICATION_TYPE_ORDER_DELIVERED = 3;
+  NOTIFICATION_TYPE_PROMOTION = 4;
+  NOTIFICATION_TYPE_SYSTEM = 5;
+}
+
+enum NotificationChannel {
+  NOTIFICATION_CHANNEL_UNSPECIFIED = 0;
+  NOTIFICATION_CHANNEL_EMAIL = 1;
+  NOTIFICATION_CHANNEL_PUSH = 2;
+  NOTIFICATION_CHANNEL_SMS = 3;
+  NOTIFICATION_CHANNEL_IN_APP = 4;
+}
+
+message Notification {
+  string id = 1;
+  string user_id = 2;
+  NotificationType type = 3;
+  string title = 4;
+  string body = 5;
+  bool is_read = 6;
+  google.protobuf.Timestamp created_at = 7;
+
+  // 関連データ
+  oneof related {
+    order.v1.Order order = 10;
+  }
+}
+
+message SendNotificationRequest {
+  string user_id = 1;
+  NotificationType type = 2;
+  string title = 3;
+  string body = 4;
+  repeated NotificationChannel channels = 5;
+  string order_id = 6;  // optional
+}
+
+message SendNotificationResponse {
+  Notification notification = 1;
+  repeated NotificationChannel sent_via = 2;
+}
+
+message ListNotificationsRequest {
+  string user_id = 1;
+  bool unread_only = 2;
+  int32 page_size = 3;
+  string page_token = 4;
+}
+
+message ListNotificationsResponse {
+  repeated Notification notifications = 1;
+  string next_page_token = 2;
+  int32 unread_count = 3;
+}
+
+message MarkAsReadRequest {
+  repeated string notification_ids = 1;
+}
+
+message MarkAsReadResponse {
+  int32 updated_count = 1;
+}
