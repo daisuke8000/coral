@@ -4,9 +4,29 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+# Protobuf
 prost = "0.13"
 prost-types = "0.13"
+bytes = "1.7"
+
+# CLI
 clap = { version = "4.5", features = ["derive"] }
+
+# Error handling
 anyhow = "1.0"
 thiserror = "1.0"
-bytes = "1.7"
+
+# Async runtime
+tokio = { version = "1.0", features = ["full"] }
+
+# Web server (Phase 5 で使用)
+axum = "0.7"
+tower-http = { version = "0.5", features = ["cors", "fs"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Logging
+log = "0.4"
+env_logger = "0.11"
