@@ -18,12 +18,6 @@ export interface EnumValue {
   number: number;
 }
 
-/** @deprecated Kept for backward compatibility - enums are now separate nodes */
-export interface EnumInfo {
-  name: string;
-  values: EnumValue[];
-}
-
 /** Message definition with fields (used in Service details for expandable RPC types) */
 export interface MessageDef {
   name: string;
@@ -52,7 +46,7 @@ export interface GraphEdge {
 
 export interface Package {
   id: string;
-  label: string;
+  label?: string;
   nodeIds: string[];
 }
 
@@ -62,6 +56,8 @@ export interface GraphData {
   packages: Package[];
 }
 
+// NodeData extends Record<string, unknown> to satisfy React Flow's type requirements
+// while maintaining type safety for our specific properties
 export interface NodeData extends Record<string, unknown> {
   label: string;
   file: string;

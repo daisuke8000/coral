@@ -1,20 +1,17 @@
-import { Handle, Position } from '@xyflow/react';
+import { memo } from 'react';
 import type { NodeData } from '@/types/graph';
+import { BaseNode } from './BaseNode';
 
 interface ServiceNodeProps {
   data: NodeData;
 }
 
-export function ServiceNode({ data }: ServiceNodeProps) {
+export const ServiceNode = memo(function ServiceNode({ data }: ServiceNodeProps) {
   return (
-    <div className="service-node">
-      <Handle type="target" position={Position.Top} className="handle-top" />
-      <div className="node-content">
-        <div className="node-icon">⚡</div>
-        <div className="node-label">{data.label}</div>
-        <div className="node-file">{data.file}</div>
-      </div>
-      <Handle type="source" position={Position.Bottom} className="handle-bottom" />
-    </div>
+    <BaseNode
+      data={data}
+      icon="⚡"
+      className="service-node bg-neon-magenta/10 border-2 border-neon-magenta shadow-[0_0_10px_var(--color-neon-magenta),0_0_20px_var(--color-neon-magenta),0_0_40px_rgba(255,0,255,0.3)] animate-pulse-magenta hover:shadow-[0_0_15px_var(--color-neon-magenta),0_0_30px_var(--color-neon-magenta),0_0_60px_rgba(255,0,255,0.5)]"
+    />
   );
-}
+});

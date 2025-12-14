@@ -1,20 +1,17 @@
-import { Handle, Position } from '@xyflow/react';
+import { memo } from 'react';
 import type { NodeData } from '@/types/graph';
+import { BaseNode } from './BaseNode';
 
 interface ExternalNodeProps {
   data: NodeData;
 }
 
-export function ExternalNode({ data }: ExternalNodeProps) {
+export const ExternalNode = memo(function ExternalNode({ data }: ExternalNodeProps) {
   return (
-    <div className="external-node">
-      <Handle type="target" position={Position.Top} className="handle-top" />
-      <div className="node-content">
-        <div className="node-icon">📚</div>
-        <div className="node-label">{data.label}</div>
-        <div className="node-file">{data.file}</div>
-      </div>
-      <Handle type="source" position={Position.Bottom} className="handle-bottom" />
-    </div>
+    <BaseNode
+      data={data}
+      icon="📚"
+      className="external-node bg-neon-gray/10 border-2 border-neon-gray opacity-70 hover:opacity-100 hover:border-white/40"
+    />
   );
-}
+});

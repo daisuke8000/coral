@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { GraphData } from '@/types/graph';
 
 // Static mode: load from JSON file (for GitHub Pages)
@@ -12,9 +12,17 @@ export function useGraphData() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [fetchKey, setFetchKey] = useState(0);
+  const isMountedRef = useRef(true);
 
   const refetch = useCallback(() => {
     setFetchKey((k) => k + 1);
+  }, []);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -35,13 +43,19 @@ export function useGraphData() {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
         const graphData: GraphData = await response.json();
-        setData(graphData);
+        if (isMountedRef.current) {
+          setData(graphData);
+        }
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') return;
-        setError(err instanceof Error ? err.message : 'Failed to fetch graph data');
-        setData(null);
+        if (isMountedRef.current) {
+          setError(err instanceof Error ? err.message : 'Failed to fetch graph data');
+          setData(null);
+        }
       } finally {
-        setLoading(false);
+        if (isMountedRef.current) {
+          setLoading(false);
+        }
       }
     };
 

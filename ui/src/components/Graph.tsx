@@ -23,10 +23,22 @@ import {
   type PackageNodeData,
 } from '@/components/nodes';
 import { DetailPanel } from '@/components/DetailPanel';
+import { PackageFilterPanel } from '@/components/PackageFilterPanel';
 import { useSelection } from '@/hooks/useSelection';
 import { useAutoLayout } from '@/hooks/useAutoLayout';
 import { usePackageGroups } from '@/hooks/usePackageGroups';
+import { usePackageVisibility } from '@/hooks/usePackageVisibility';
+import { useIsMobile } from '@/hooks/useIsMobile';
 import type { GraphData, NodeData, NodeType } from '@/types/graph';
+import {
+  NEON_MAGENTA,
+  NEON_CYAN,
+  NEON_YELLOW,
+  NEON_GRAY,
+  NEON_PURPLE,
+  NEON_WHITE,
+} from '@/constants/layout';
+import { BUTTON_BASE_STYLES } from '@/constants/styles';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const nodeTypes: Record<string, any> = {
@@ -44,17 +56,38 @@ interface GraphProps {
 interface CalculateLayoutOptions {
   expandedPackages: Set<string>;
   togglePackage: (packageId: string) => void;
+  visiblePackages: Set<string>;
+  nodeToPackageMap: Map<string, string>;
 }
+
+// MiniMap node color mapping (memoized outside component)
+const getNodeColor = (node: Node): string => {
+  switch (node.type) {
+    case 'service':
+      return NEON_MAGENTA;
+    case 'message':
+      return NEON_CYAN;
+    case 'enum':
+      return NEON_YELLOW;
+    case 'external':
+      return NEON_GRAY;
+    case 'package':
+      return NEON_PURPLE;
+    default:
+      return NEON_WHITE;
+  }
+};
 
 function calculateLayout(
   data: GraphData,
   options: CalculateLayoutOptions
 ): { nodes: Node[]; edges: Edge[] } {
-  const { expandedPackages, togglePackage } = options;
+  const { expandedPackages, togglePackage, visiblePackages, nodeToPackageMap } = options;
   const packageMap = new Map<string, typeof data.nodes>();
 
-  // Group nodes by package
+  // Group nodes by package (only visible packages)
   data.nodes.forEach((node) => {
+    if (!visiblePackages.has(node.package)) return;
     const existing = packageMap.get(node.package) || [];
     existing.push(node);
     packageMap.set(node.package, existing);
@@ -125,19 +158,18 @@ function calculateLayout(
     packageX += packageWidth + packagePadding;
   });
 
-  // Build node to package mapping for edge routing
-  const nodeToPackage = new Map<string, string>();
-  data.nodes.forEach((node) => {
-    nodeToPackage.set(node.id, node.package);
-  });
-
-  // Create edges with smart routing
+  // Create edges with smart routing (filter by visible packages)
   const edgeSet = new Set<string>();
   const edges: Edge[] = [];
 
   data.edges.forEach((edge, index) => {
-    const sourcePackage = nodeToPackage.get(edge.source);
-    const targetPackage = nodeToPackage.get(edge.target);
+    const sourcePackage = nodeToPackageMap.get(edge.source);
+    const targetPackage = nodeToPackageMap.get(edge.target);
+
+    // Skip edges where either endpoint's package is hidden
+    if (sourcePackage && !visiblePackages.has(sourcePackage)) return;
+    if (targetPackage && !visiblePackages.has(targetPackage)) return;
+
     const sourceExpanded = sourcePackage ? expandedPackages.has(sourcePackage) : true;
     const targetExpanded = targetPackage ? expandedPackages.has(targetPackage) : true;
 
@@ -184,25 +216,44 @@ export function Graph({ data }: GraphProps) {
     totalPackages,
   } = usePackageGroups(data);
 
+  const {
+    visiblePackages,
+    togglePackageVisibility,
+    showAllPackages,
+    hideAllPackages,
+  } = usePackageVisibility(data);
+
+  const [filterPanelOpen, setFilterPanelOpen] = useState(false);
+
+  const nodeToPackageMap = useMemo(() => {
+    const map = new Map<string, string>();
+    data.nodes.forEach((node) => {
+      map.set(node.id, node.package);
+    });
+    return map;
+  }, [data.nodes]);
+
   const { nodes: initialNodes, edges: initialEdges } = useMemo(
-    () => calculateLayout(data, { expandedPackages, togglePackage }),
-    [data, expandedPackages, togglePackage]
+    () => calculateLayout(data, { expandedPackages, togglePackage, visiblePackages, nodeToPackageMap }),
+    [data, expandedPackages, togglePackage, visiblePackages, nodeToPackageMap]
   );
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const { getLayoutedNodes } = useAutoLayout();
   const [layoutMode, setLayoutMode] = useState<'flat' | 'auto'>('flat');
+  const isMobile = useIsMobile();
 
-  // Update nodes when expanded packages change
   useEffect(() => {
     const { nodes: newNodes, edges: newEdges } = calculateLayout(data, {
       expandedPackages,
       togglePackage,
+      visiblePackages,
+      nodeToPackageMap,
     });
     setNodes(newNodes);
     setEdges(newEdges);
-  }, [expandedPackages, data, togglePackage, setNodes, setEdges]);
+  }, [expandedPackages, visiblePackages, data, togglePackage, nodeToPackageMap, setNodes, setEdges]);
 
   const styledNodes = useMemo(
     () =>
@@ -221,7 +272,7 @@ export function Graph({ data }: GraphProps) {
         return {
           ...edge,
           style: highlighted
-            ? { stroke: 'var(--neon-cyan)', strokeWidth: 3 }
+            ? { stroke: 'var(--color-neon-cyan)', strokeWidth: 3 }
             : { stroke: 'rgba(255, 255, 255, 0.1)', strokeWidth: 1 },
           animated: highlighted,
         };
@@ -247,26 +298,34 @@ export function Graph({ data }: GraphProps) {
 
   const handleLayoutToggle = useCallback(() => {
     if (layoutMode === 'flat') {
-      // Apply dagre hierarchical layout
       const layoutedNodes = getLayoutedNodes(nodes, edges, 'TB');
       setNodes(layoutedNodes);
       setLayoutMode('auto');
     } else {
-      // Reset to flat package-based layout
       const { nodes: flatNodes } = calculateLayout(data, {
         expandedPackages,
         togglePackage,
+        visiblePackages,
+        nodeToPackageMap,
       });
       setNodes(flatNodes);
       setLayoutMode('flat');
     }
-  }, [layoutMode, nodes, edges, getLayoutedNodes, setNodes, data, expandedPackages, togglePackage]);
+  }, [layoutMode, nodes, edges, getLayoutedNodes, setNodes, data, expandedPackages, togglePackage, visiblePackages, nodeToPackageMap]);
+
+  const handleFilterPanelToggle = useCallback(() => {
+    setFilterPanelOpen((prev) => !prev);
+  }, []);
+
+  const handleFilterPanelClose = useCallback(() => {
+    setFilterPanelOpen(false);
+  }, []);
 
   const isAllExpanded = expandedCount === totalPackages;
   const isAllCollapsed = expandedCount === 0;
 
   return (
-    <div className="graph-container">
+    <div className="relative flex-1 w-full h-full overflow-hidden">
       <ReactFlow
         nodes={styledNodes}
         edges={styledEdges}
@@ -279,6 +338,11 @@ export function Graph({ data }: GraphProps) {
         fitView
         attributionPosition="bottom-left"
         className="neon-flow"
+        minZoom={0.1}
+        maxZoom={2}
+        panOnScroll={true}
+        zoomOnPinch={true}
+        preventScrolling={true}
       >
         <Background
           variant={BackgroundVariant.Dots}
@@ -287,52 +351,67 @@ export function Graph({ data }: GraphProps) {
           color="rgba(255, 255, 255, 0.1)"
         />
         <Controls className="neon-controls" />
-        <MiniMap
-          className="neon-minimap"
-          nodeColor={(node) => {
-            switch (node.type) {
-              case 'service':
-                return '#ff00ff';
-              case 'message':
-                return '#00ffff';
-              case 'enum':
-                return '#ffcc00';
-              case 'external':
-                return '#666666';
-              case 'package':
-                return '#8080ff';
-              default:
-                return '#ffffff';
-            }
-          }}
-          maskColor="rgba(10, 10, 15, 0.8)"
-        />
-        <Panel position="top-right" className="layout-panel">
+        {/* MiniMap hidden on tablet and below */}
+        {!isMobile && (
+          <MiniMap
+            className="neon-minimap"
+            nodeColor={getNodeColor}
+            maskColor="rgba(10, 10, 15, 0.8)"
+          />
+        )}
+        <Panel position="top-right" className="m-2 flex flex-col sm:flex-row gap-2">
           <button
-            className="expand-all-button"
+            className={`${BUTTON_BASE_STYLES} ${filterPanelOpen ? 'bg-neon-cyan/20 border-neon-cyan' : ''}`}
+            onClick={handleFilterPanelToggle}
+            title="Filter packages"
+            aria-label="Filter packages"
+          >
+            <span className="sm:hidden">📦</span>
+            <span className="hidden sm:inline">📦 Filter</span>
+          </button>
+          <button
+            className={BUTTON_BASE_STYLES}
             onClick={expandAll}
             disabled={isAllExpanded}
             title="Expand all packages"
+            aria-label="Expand all packages"
           >
-            📂 Expand All
+            <span className="sm:hidden">📂</span>
+            <span className="hidden sm:inline">📂 Expand All</span>
           </button>
           <button
-            className="collapse-all-button"
+            className={BUTTON_BASE_STYLES}
             onClick={collapseAll}
             disabled={isAllCollapsed}
             title="Collapse all packages"
+            aria-label="Collapse all packages"
           >
-            📁 Collapse All
+            <span className="sm:hidden">📁</span>
+            <span className="hidden sm:inline">📁 Collapse All</span>
           </button>
           <button
-            className="layout-toggle-button"
+            className={BUTTON_BASE_STYLES}
             onClick={handleLayoutToggle}
             title={layoutMode === 'flat' ? 'Switch to hierarchical layout' : 'Switch to flat layout'}
+            aria-label={layoutMode === 'flat' ? 'Switch to hierarchical layout' : 'Switch to flat layout'}
           >
-            {layoutMode === 'flat' ? '📊 AutoLayout' : '📋 FlatLayout'}
+            <span className="sm:hidden">{layoutMode === 'flat' ? '📊' : '📋'}</span>
+            <span className="hidden sm:inline">
+              {layoutMode === 'flat' ? '📊 AutoLayout' : '📋 FlatLayout'}
+            </span>
           </button>
         </Panel>
       </ReactFlow>
+      {filterPanelOpen && (
+        <PackageFilterPanel
+          packages={data.packages}
+          visiblePackages={visiblePackages}
+          onToggle={togglePackageVisibility}
+          onShowAll={showAllPackages}
+          onHideAll={hideAllPackages}
+          onClose={handleFilterPanelClose}
+        />
+      )}
       <DetailPanel node={selectedNode} onClose={clearSelection} />
     </div>
   );
