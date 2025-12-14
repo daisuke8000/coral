@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type {
   GraphNode,
   MethodSignature,
@@ -12,11 +12,54 @@ interface DetailPanelProps {
   onClose: () => void;
 }
 
+const MIN_WIDTH = 280;
+const MAX_WIDTH_RATIO = 0.8;
+const DEFAULT_WIDTH = 340;
+
 export function DetailPanel({ node, onClose }: DetailPanelProps) {
+  const [panelWidth, setPanelWidth] = useState(DEFAULT_WIDTH);
+  const [isDragging, setIsDragging] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const maxWidth = window.innerWidth * MAX_WIDTH_RATIO;
+      const newWidth = window.innerWidth - e.clientX;
+      setPanelWidth(Math.max(MIN_WIDTH, Math.min(maxWidth, newWidth)));
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging]);
+
   if (!node) return null;
 
   return (
-    <div className="detail-panel">
+    <div
+      ref={panelRef}
+      className={`detail-panel ${isDragging ? 'dragging' : ''}`}
+      style={{ width: panelWidth }}
+    >
+      <div
+        className={`resize-handle ${isDragging ? 'active' : ''}`}
+        onMouseDown={handleMouseDown}
+      />
       <div className="panel-header">
         <h2>{node.label}</h2>
         <button className="close-button" onClick={onClose} aria-label="Close">
@@ -104,24 +147,26 @@ function ServiceDetails({
 
     return (
       <div className="expanded-fields">
-        <table className="field-table compact">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Name</th>
-              <th>Type</th>
-            </tr>
-          </thead>
-          <tbody>
-            {messageDef.fields.map((f) => (
-              <tr key={`${f.number}-${f.name}`}>
-                <td className="field-number">{f.number}</td>
-                <td className="field-name">{f.name}</td>
-                <td className="field-type">{f.typeName}</td>
+        <div className="field-table-container">
+          <table className="field-table compact">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Name</th>
+                <th>Type</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {messageDef.fields.map((f) => (
+                <tr key={`${f.number}-${f.name}`}>
+                  <td className="field-number">{f.number}</td>
+                  <td className="field-name">{f.name}</td>
+                  <td className="field-type">{f.typeName}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     );
   };
@@ -165,24 +210,26 @@ function MessageDetails({
         {fields.length === 0 ? (
           <p className="empty-note">No fields defined</p>
         ) : (
-          <table className="field-table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Name</th>
-                <th>Type</th>
-              </tr>
-            </thead>
-            <tbody>
-              {fields.map((f) => (
-                <tr key={`${f.number}-${f.name}`}>
-                  <td className="field-number">{f.number}</td>
-                  <td className="field-name">{f.name}</td>
-                  <td className={`field-type ${f.label}`}>{f.typeName}</td>
+          <div className="field-table-container">
+            <table className="field-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Name</th>
+                  <th>Type</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {fields.map((f) => (
+                  <tr key={`${f.number}-${f.name}`}>
+                    <td className="field-number">{f.number}</td>
+                    <td className="field-name">{f.name}</td>
+                    <td className={`field-type ${f.label}`}>{f.typeName}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 

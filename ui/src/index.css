@@ -352,8 +352,9 @@ body {
   position: absolute;
   right: 0;
   top: 0;
-  width: 340px;
   height: 100%;
+  min-width: 280px;
+  max-width: 80vw;
   background: rgba(10, 10, 15, 0.95);
   border-left: 1px solid var(--neon-cyan);
   padding: 0;
@@ -361,6 +362,29 @@ body {
   z-index: 100;
   box-shadow: -4px 0 20px rgba(0, 255, 255, 0.1);
   animation: slideIn 0.2s ease-out;
+}
+
+.detail-panel.dragging {
+  user-select: none;
+  transition: none;
+}
+
+.resize-handle {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 6px;
+  height: 100%;
+  cursor: ew-resize;
+  background: transparent;
+  z-index: 101;
+  transition: background 0.2s ease;
+}
+
+.resize-handle:hover,
+.resize-handle.active {
+  background: var(--neon-cyan);
+  box-shadow: 0 0 8px var(--neon-cyan);
 }
 
 @keyframes slideIn {
@@ -490,10 +514,39 @@ body {
   color: var(--text-secondary);
   font-size: 0.75rem;
   font-family: 'Menlo', 'Monaco', monospace;
+  overflow-x: auto;
+  white-space: nowrap;
+  padding-bottom: 4px;
+}
+
+.method-sig::-webkit-scrollbar {
+  height: 4px;
+}
+
+.method-sig::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+}
+
+.field-table-container {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 0 -4px;
+  padding: 0 4px;
+}
+
+.field-table-container::-webkit-scrollbar {
+  height: 4px;
+}
+
+.field-table-container::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
 }
 
 .field-table {
   width: 100%;
+  min-width: max-content;
   border-collapse: collapse;
   font-size: 0.85rem;
 }
