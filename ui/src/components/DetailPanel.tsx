@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useEffect, useCallback, useRef, useState } from 'react';
 import type {
   GraphNode,
   MethodSignature,
   FieldInfo,
-  EnumInfo,
+  EnumValue,
   MessageDef,
 } from '@/types/graph';
 
@@ -80,10 +80,11 @@ export function DetailPanel({ node, onClose }: DetailPanelProps) {
         )}
 
         {node.details.kind === 'Message' && (
-          <MessageDetails
-            fields={node.details.fields}
-            enums={node.details.enums}
-          />
+          <MessageDetails fields={node.details.fields} />
+        )}
+
+        {node.details.kind === 'Enum' && (
+          <EnumDetails values={node.details.values} />
         )}
 
         {node.details.kind === 'External' && (
@@ -147,26 +148,24 @@ function ServiceDetails({
 
     return (
       <div className="expanded-fields">
-        <div className="field-table-container">
-          <table className="field-table compact">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Name</th>
-                <th>Type</th>
+        <table className="field-table compact">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Name</th>
+              <th>Type</th>
+            </tr>
+          </thead>
+          <tbody>
+            {messageDef.fields.map((f) => (
+              <tr key={`${f.number}-${f.name}`}>
+                <td className="field-number">{f.number}</td>
+                <td className="field-name">{f.name}</td>
+                <td className="field-type">{f.typeName}</td>
               </tr>
-            </thead>
-            <tbody>
-              {messageDef.fields.map((f) => (
-                <tr key={`${f.number}-${f.name}`}>
-                  <td className="field-number">{f.number}</td>
-                  <td className="field-name">{f.name}</td>
-                  <td className="field-type">{f.typeName}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+            ))}
+          </tbody>
+        </table>
       </div>
     );
   };
@@ -196,61 +195,54 @@ function ServiceDetails({
   );
 }
 
-function MessageDetails({
-  fields,
-  enums,
-}: {
-  fields: FieldInfo[];
-  enums: EnumInfo[];
-}) {
+function MessageDetails({ fields }: { fields: FieldInfo[] }) {
   return (
-    <>
-      <div className="detail-section">
-        <h3>📦 Fields ({fields.length})</h3>
-        {fields.length === 0 ? (
-          <p className="empty-note">No fields defined</p>
-        ) : (
-          <div className="field-table-container">
-            <table className="field-table">
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Name</th>
-                  <th>Type</th>
+    <div className="detail-section">
+      <h3>📦 Fields ({fields.length})</h3>
+      {fields.length === 0 ? (
+        <p className="empty-note">No fields defined</p>
+      ) : (
+        <div className="field-table-container">
+          <table className="field-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Name</th>
+                <th>Type</th>
+              </tr>
+            </thead>
+            <tbody>
+              {fields.map((f) => (
+                <tr key={`${f.number}-${f.name}`}>
+                  <td className="field-number">{f.number}</td>
+                  <td className="field-name">{f.name}</td>
+                  <td className={`field-type ${f.label}`}>{f.typeName}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {fields.map((f) => (
-                  <tr key={`${f.number}-${f.name}`}>
-                    <td className="field-number">{f.number}</td>
-                    <td className="field-name">{f.name}</td>
-                    <td className={`field-type ${f.label}`}>{f.typeName}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {enums.length > 0 && (
-        <div className="detail-section">
-          <h3>📋 Enums ({enums.length})</h3>
-          {enums.map((e) => (
-            <div key={e.name} className="enum-block">
-              <h4>{e.name}</h4>
-              <ul className="enum-values">
-                {e.values.map((v) => (
-                  <li key={v.number}>
-                    <span className="enum-value-name">{v.name}</span>
-                    <span className="enum-value-number"> = {v.number}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
-    </>
+    </div>
+  );
+}
+
+function EnumDetails({ values }: { values: EnumValue[] }) {
+  return (
+    <div className="detail-section">
+      <h3>📋 Values ({values.length})</h3>
+      {values.length === 0 ? (
+        <p className="empty-note">No values defined</p>
+      ) : (
+        <ul className="enum-values">
+          {values.map((v) => (
+            <li key={v.number}>
+              <span className="enum-value-name">{v.name}</span>
+              <span className="enum-value-number"> = {v.number}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
