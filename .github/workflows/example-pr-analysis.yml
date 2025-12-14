@@ -1,0 +1,29 @@
+# Example: Analyze proto dependencies on Pull Request
+# Copy this file to your project's .github/workflows/ directory
+
+name: Proto Dependency Analysis
+
+on:
+  pull_request:
+    paths:
+      - 'proto/**'
+      - 'buf.yaml'
+      - 'buf.lock'
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Analyze Proto Dependencies
+        uses: your-org/coral@v1  # Replace with your repo
+        with:
+          proto-path: 'proto'
+          comment-on-pr: 'true'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
