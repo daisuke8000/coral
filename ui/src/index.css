@@ -483,8 +483,18 @@ body {
   box-shadow: 0 0 6px var(--neon-cyan);
 }
 
+.legend-dot.enum {
+  background: var(--neon-yellow);
+  box-shadow: 0 0 6px var(--neon-yellow);
+}
+
 .legend-dot.external {
   background: var(--neon-gray);
+}
+
+.legend-dot.package {
+  background: #8080ff;
+  box-shadow: 0 0 6px rgba(128, 128, 255, 0.6);
 }
 
 .neon-flow .react-flow__node.dimmed {

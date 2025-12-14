@@ -22,8 +22,16 @@ function App() {
             <span>Message</span>
           </div>
           <div className="legend-item">
+            <span className="legend-dot enum"></span>
+            <span>Enum</span>
+          </div>
+          <div className="legend-item">
             <span className="legend-dot external"></span>
             <span>External</span>
+          </div>
+          <div className="legend-item">
+            <span className="legend-dot package"></span>
+            <span>Package</span>
           </div>
         </div>
       </header>

@@ -156,10 +156,10 @@ impl Analyzer {
                 .into_iter()
                 .flatten()
             {
-                if seen_types.insert(type_name.clone()) {
-                    if let Some(msg_def) = self.type_to_message_def.get(type_name) {
-                        messages.push(msg_def.clone());
-                    }
+                if seen_types.insert(type_name.clone())
+                    && let Some(msg_def) = self.type_to_message_def.get(type_name)
+                {
+                    messages.push(msg_def.clone());
                 }
             }
         }
