@@ -100,7 +100,9 @@ mod tests {
     use tower::ServiceExt;
 
     use super::*;
-    use crate::domain::{Edge, FieldInfo, MessageDef, MethodSignature, Node, NodeDetails, NodeType, Package};
+    use crate::domain::{
+        Edge, FieldInfo, MessageDef, MethodSignature, Node, NodeDetails, NodeType, Package,
+    };
 
     fn test_graph() -> GraphModel {
         GraphModel {

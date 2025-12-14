@@ -73,7 +73,9 @@ impl Default for GraphModel {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::node::{FieldInfo, MessageDef, MethodSignature, Node, NodeDetails, NodeType};
+    use crate::domain::node::{
+        FieldInfo, MessageDef, MethodSignature, Node, NodeDetails, NodeType,
+    };
 
     #[test]
     fn test_edge_roundtrip() {

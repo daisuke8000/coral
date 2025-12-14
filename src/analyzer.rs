@@ -6,8 +6,8 @@ use prost_types::FileDescriptorSet;
 use prost_types::field_descriptor_proto::{Label, Type};
 
 use crate::domain::{
-    Edge, EnumInfo, EnumValue, FieldInfo, GraphModel, MessageDef, MethodSignature, Node, NodeDetails, NodeType,
-    Package,
+    Edge, EnumInfo, EnumValue, FieldInfo, GraphModel, MessageDef, MethodSignature, Node,
+    NodeDetails, NodeType, Package,
 };
 
 pub struct Analyzer {
