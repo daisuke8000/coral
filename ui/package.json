@@ -12,8 +12,10 @@
   },
   "dependencies": {
     "@tailwindcss/postcss": "^4.1.17",
+    "@types/dagre": "^0.7.53",
     "@xyflow/react": "^12.10.0",
     "autoprefixer": "^10.4.22",
+    "dagre": "^0.8.5",
     "postcss": "^8.5.6",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
