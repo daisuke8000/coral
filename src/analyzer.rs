@@ -152,7 +152,10 @@ impl Analyzer {
         let mut seen_types = HashSet::new();
         let mut messages = Vec::new();
         for method in &service.method {
-            for type_name in [&method.input_type, &method.output_type].into_iter().flatten() {
+            for type_name in [&method.input_type, &method.output_type]
+                .into_iter()
+                .flatten()
+            {
                 if seen_types.insert(type_name.clone()) {
                     if let Some(msg_def) = self.type_to_message_def.get(type_name) {
                         messages.push(msg_def.clone());

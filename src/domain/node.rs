@@ -60,8 +60,12 @@ pub enum NodeDetails {
         methods: Vec<MethodSignature>,
         messages: Vec<MessageDef>,
     },
-    Message { fields: Vec<FieldInfo> },
-    Enum { values: Vec<EnumValue> },
+    Message {
+        fields: Vec<FieldInfo>,
+    },
+    Enum {
+        values: Vec<EnumValue>,
+    },
     External,
 }
 
