@@ -1,4 +1,5 @@
 import { Graph } from '@/components/Graph';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useGraphData } from '@/hooks/useGraphData';
 import '@/index.css';
 
@@ -52,7 +53,11 @@ function App() {
           </div>
         )}
 
-        {data && <Graph data={data} />}
+        {data && (
+          <ErrorBoundary>
+            <Graph data={data} />
+          </ErrorBoundary>
+        )}
       </main>
     </div>
   );

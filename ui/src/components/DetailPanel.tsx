@@ -7,27 +7,30 @@ import type {
   MessageDef,
 } from '@/types/graph';
 import { useIsMobile } from '@/hooks/useIsMobile';
+import { useSwipeToClose } from '@/hooks/useSwipeToClose';
+import {
+  MIN_PANEL_WIDTH,
+  MAX_WIDTH_RATIO,
+  DEFAULT_PANEL_WIDTH,
+  SWIPE_THRESHOLD,
+} from '@/constants/layout';
 
 interface DetailPanelProps {
   node: GraphNode | null;
   onClose: () => void;
 }
 
-const MIN_WIDTH = 280;
-const MAX_WIDTH_RATIO = 0.8;
-const DEFAULT_WIDTH = 340;
-
 export function DetailPanel({ node, onClose }: DetailPanelProps) {
-  const [panelWidth, setPanelWidth] = useState(DEFAULT_WIDTH);
+  const [panelWidth, setPanelWidth] = useState(DEFAULT_PANEL_WIDTH);
   const [isDragging, setIsDragging] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
+  const dragHandleRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
+  const { handleTouchStart, handleTouchEnd } = useSwipeToClose(onClose, SWIPE_THRESHOLD);
 
-  // Pointer events for touch support
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     e.preventDefault();
     setIsDragging(true);
-    // Capture pointer for drag outside element
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
   }, []);
 
@@ -37,10 +40,13 @@ export function DetailPanel({ node, onClose }: DetailPanelProps) {
     const handlePointerMove = (e: PointerEvent) => {
       const maxWidth = window.innerWidth * MAX_WIDTH_RATIO;
       const newWidth = window.innerWidth - e.clientX;
-      setPanelWidth(Math.max(MIN_WIDTH, Math.min(maxWidth, newWidth)));
+      setPanelWidth(Math.max(MIN_PANEL_WIDTH, Math.min(maxWidth, newWidth)));
     };
 
-    const handlePointerUp = () => {
+    const handlePointerUp = (e: PointerEvent) => {
+      if (dragHandleRef.current) {
+        dragHandleRef.current.releasePointerCapture(e.pointerId);
+      }
       setIsDragging(false);
     };
 
@@ -54,24 +60,6 @@ export function DetailPanel({ node, onClose }: DetailPanelProps) {
       document.removeEventListener('pointercancel', handlePointerUp);
     };
   }, [isDragging]);
-
-  // Handle swipe down to close on mobile
-  const [touchStartY, setTouchStartY] = useState<number | null>(null);
-
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    setTouchStartY(e.touches[0].clientY);
-  }, []);
-
-  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
-    if (touchStartY === null) return;
-    const touchEndY = e.changedTouches[0].clientY;
-    const deltaY = touchEndY - touchStartY;
-    // Swipe down more than 100px to close
-    if (deltaY > 100) {
-      onClose();
-    }
-    setTouchStartY(null);
-  }, [touchStartY, onClose]);
 
   if (!node) return null;
 
@@ -109,6 +97,7 @@ export function DetailPanel({ node, onClose }: DetailPanelProps) {
       {/* Desktop resize handle */}
       {!isMobile && (
         <div
+          ref={dragHandleRef}
           className={`
             absolute left-0 top-0 w-1 h-full cursor-ew-resize
             bg-neon-cyan/30 hover:bg-neon-cyan/60
@@ -192,6 +181,39 @@ function ServiceDetails({
     return messages.find((m) => m.name === typeName);
   };
 
+  return (
+    <div className="space-y-3">
+      <h3 className="text-sm sm:text-base font-semibold text-neon-magenta flex items-center gap-2">
+        <span>⚡</span>
+        <span>RPC Methods ({methods.length})</span>
+      </h3>
+      {methods.length === 0 ? (
+        <p className="text-text-secondary text-sm italic">No methods defined</p>
+      ) : (
+        <ul className="space-y-3">
+          {methods.map((m) => (
+            <MethodItem
+              key={m.name}
+              method={m}
+              expandedTypes={expandedTypes}
+              onToggleType={toggleType}
+              findMessage={findMessage}
+            />
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+interface MethodItemProps {
+  method: MethodSignature;
+  expandedTypes: Set<string>;
+  onToggleType: (typeName: string) => void;
+  findMessage: (typeName: string) => MessageDef | undefined;
+}
+
+function MethodItem({ method, expandedTypes, onToggleType, findMessage }: MethodItemProps) {
   const renderTypeLink = (typeName: string) => {
     const messageDef = findMessage(typeName);
     const isExpanded = expandedTypes.has(typeName);
@@ -207,7 +229,7 @@ function ServiceDetails({
             min-h-[32px] sm:min-h-0 touch-manipulation
             ${isExpanded ? 'bg-neon-cyan/10' : ''}
           `}
-          onClick={() => toggleType(typeName)}
+          onClick={() => onToggleType(typeName)}
         >
           {typeName}
           <span className="text-[0.65rem] sm:text-xs opacity-70">{isExpanded ? '▼' : '▶'}</span>
@@ -217,63 +239,55 @@ function ServiceDetails({
     return <span className="text-text-secondary text-xs sm:text-sm">{typeName}</span>;
   };
 
-  const renderExpandedFields = (typeName: string) => {
-    if (!expandedTypes.has(typeName)) return null;
-    const messageDef = findMessage(typeName);
-    if (!messageDef) return null;
-
-    return (
-      <div className="mt-2 ml-2 sm:ml-4 p-2 bg-white/5 rounded-lg border border-white/10 animate-slide-down overflow-x-auto">
-        <table className="w-full text-xs sm:text-sm">
-          <thead>
-            <tr className="text-text-secondary text-left">
-              <th className="p-1 sm:p-1.5 w-8">#</th>
-              <th className="p-1 sm:p-1.5">Name</th>
-              <th className="p-1 sm:p-1.5">Type</th>
-            </tr>
-          </thead>
-          <tbody>
-            {messageDef.fields.map((f) => (
-              <tr key={`${f.number}-${f.name}`} className="border-t border-white/5">
-                <td className="p-1 sm:p-1.5 text-text-secondary font-mono">{f.number}</td>
-                <td className="p-1 sm:p-1.5 text-white font-medium">{f.name}</td>
-                <td className="p-1 sm:p-1.5 text-neon-cyan/80 font-mono">{f.typeName}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+  return (
+    <li className="p-2 sm:p-3 bg-white/5 rounded-lg border border-white/10">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+        <span className="font-semibold text-white text-sm sm:text-base">{method.name}</span>
+        <span className="text-xs sm:text-sm text-text-secondary flex items-center flex-wrap gap-1">
+          <span>(</span>
+          {renderTypeLink(method.inputType)}
+          <span>)</span>
+          <span className="mx-1">→</span>
+          {renderTypeLink(method.outputType)}
+        </span>
       </div>
-    );
-  };
+      <ExpandedFieldsTable typeName={method.inputType} expandedTypes={expandedTypes} findMessage={findMessage} />
+      <ExpandedFieldsTable typeName={method.outputType} expandedTypes={expandedTypes} findMessage={findMessage} />
+    </li>
+  );
+}
+
+interface ExpandedFieldsTableProps {
+  typeName: string;
+  expandedTypes: Set<string>;
+  findMessage: (typeName: string) => MessageDef | undefined;
+}
+
+function ExpandedFieldsTable({ typeName, expandedTypes, findMessage }: ExpandedFieldsTableProps) {
+  if (!expandedTypes.has(typeName)) return null;
+  const messageDef = findMessage(typeName);
+  if (!messageDef) return null;
 
   return (
-    <div className="space-y-3">
-      <h3 className="text-sm sm:text-base font-semibold text-neon-magenta flex items-center gap-2">
-        <span>⚡</span>
-        <span>RPC Methods ({methods.length})</span>
-      </h3>
-      {methods.length === 0 ? (
-        <p className="text-text-secondary text-sm italic">No methods defined</p>
-      ) : (
-        <ul className="space-y-3">
-          {methods.map((m) => (
-            <li key={m.name} className="p-2 sm:p-3 bg-white/5 rounded-lg border border-white/10">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
-                <span className="font-semibold text-white text-sm sm:text-base">{m.name}</span>
-                <span className="text-xs sm:text-sm text-text-secondary flex items-center flex-wrap gap-1">
-                  <span>(</span>
-                  {renderTypeLink(m.inputType)}
-                  <span>)</span>
-                  <span className="mx-1">→</span>
-                  {renderTypeLink(m.outputType)}
-                </span>
-              </div>
-              {renderExpandedFields(m.inputType)}
-              {renderExpandedFields(m.outputType)}
-            </li>
+    <div className="mt-2 ml-2 sm:ml-4 p-2 bg-white/5 rounded-lg border border-white/10 animate-slide-down overflow-x-auto">
+      <table className="w-full text-xs sm:text-sm">
+        <thead>
+          <tr className="text-text-secondary text-left">
+            <th className="p-1 sm:p-1.5 w-8">#</th>
+            <th className="p-1 sm:p-1.5">Name</th>
+            <th className="p-1 sm:p-1.5">Type</th>
+          </tr>
+        </thead>
+        <tbody>
+          {messageDef.fields.map((f) => (
+            <tr key={`${f.number}-${f.name}`} className="border-t border-white/5">
+              <td className="p-1 sm:p-1.5 text-text-secondary font-mono">{f.number}</td>
+              <td className="p-1 sm:p-1.5 text-white font-medium">{f.name}</td>
+              <td className="p-1 sm:p-1.5 text-neon-cyan/80 font-mono">{f.typeName}</td>
+            </tr>
           ))}
-        </ul>
-      )}
+        </tbody>
+      </table>
     </div>
   );
 }
