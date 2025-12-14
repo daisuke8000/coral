@@ -1,6 +1,8 @@
+//! Node types for the proto dependency graph.
+
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum NodeType {
     Service,
@@ -8,7 +10,7 @@ pub enum NodeType {
     External,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MethodSignature {
     pub name: String,
@@ -16,7 +18,7 @@ pub struct MethodSignature {
     pub output_type: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FieldInfo {
     pub name: String,
@@ -25,36 +27,40 @@ pub struct FieldInfo {
     pub label: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EnumValue {
     pub name: String,
     pub number: i32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EnumInfo {
     pub name: String,
     pub values: Vec<EnumValue>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Uses `#[serde(tag = "kind")]` for TypeScript discriminated unions.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind")]
 pub enum NodeDetails {
-    Service { methods: Vec<MethodSignature> },
-    Message { fields: Vec<FieldInfo>, enums: Vec<EnumInfo> },
+    Service {
+        methods: Vec<MethodSignature>,
+    },
+    Message {
+        fields: Vec<FieldInfo>,
+        enums: Vec<EnumInfo>,
+    },
     External,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Node {
     pub id: String,
-
     #[serde(rename = "type")]
     pub node_type: NodeType,
-
     pub package: String,
     pub label: String,
     pub file: String,
@@ -62,8 +68,23 @@ pub struct Node {
 }
 
 impl Node {
-    pub fn new(id: String, node_type: NodeType, package: String, label: String, file: String, details: NodeDetails) -> Self {
-        Self { id, node_type, package, label, file, details }
+    #[must_use]
+    pub fn new(
+        id: String,
+        node_type: NodeType,
+        package: String,
+        label: String,
+        file: String,
+        details: NodeDetails,
+    ) -> Self {
+        Self {
+            id,
+            node_type,
+            package,
+            label,
+            file,
+            details,
+        }
     }
 }
 
@@ -73,7 +94,6 @@ mod tests {
 
     #[test]
     fn test_node_type_roundtrip() {
-        // All variants: serialize → deserialize
         let cases = [
             (NodeType::Service, "\"service\""),
             (NodeType::Message, "\"message\""),
@@ -131,8 +151,14 @@ mod tests {
         let original = EnumInfo {
             name: "Status".to_string(),
             values: vec![
-                EnumValue { name: "UNKNOWN".to_string(), number: 0 },
-                EnumValue { name: "ACTIVE".to_string(), number: 1 },
+                EnumValue {
+                    name: "UNKNOWN".to_string(),
+                    number: 0,
+                },
+                EnumValue {
+                    name: "ACTIVE".to_string(),
+                    number: 1,
+                },
             ],
         };
 
@@ -148,7 +174,6 @@ mod tests {
 
     #[test]
     fn test_node_details_all_variants() {
-        // Service variant
         let service = NodeDetails::Service {
             methods: vec![MethodSignature {
                 name: "Get".to_string(),
@@ -160,7 +185,6 @@ mod tests {
         assert!(json.contains("\"kind\":\"Service\""));
         assert!(json.contains("\"methods\":["));
 
-        // Message variant
         let message = NodeDetails::Message {
             fields: vec![FieldInfo {
                 name: "id".to_string(),
@@ -170,7 +194,10 @@ mod tests {
             }],
             enums: vec![EnumInfo {
                 name: "Status".to_string(),
-                values: vec![EnumValue { name: "UNKNOWN".to_string(), number: 0 }],
+                values: vec![EnumValue {
+                    name: "UNKNOWN".to_string(),
+                    number: 0,
+                }],
             }],
         };
         let json = serde_json::to_string(&message).expect("serialize");
@@ -178,7 +205,6 @@ mod tests {
         assert!(json.contains("\"fields\":["));
         assert!(json.contains("\"enums\":["));
 
-        // External variant
         let external = NodeDetails::External;
         let json = serde_json::to_string(&external).expect("serialize");
         assert!(json.contains("\"kind\":\"External\""));
@@ -187,7 +213,6 @@ mod tests {
     #[test]
     fn test_node_all_types_roundtrip() {
         let nodes = vec![
-            // Service node
             Node::new(
                 "user.v1/UserService".to_string(),
                 NodeType::Service,
@@ -202,7 +227,6 @@ mod tests {
                     }],
                 },
             ),
-            // Message node
             Node::new(
                 "user.v1/User".to_string(),
                 NodeType::Message,
@@ -219,7 +243,6 @@ mod tests {
                     enums: vec![],
                 },
             ),
-            // External node
             Node::new(
                 "google.protobuf/Timestamp".to_string(),
                 NodeType::External,
@@ -233,7 +256,6 @@ mod tests {
         for original in nodes {
             let json = serde_json::to_string(&original).expect("serialize");
 
-            // Verify key JSON structure
             assert!(json.contains("\"type\":"));
             assert!(json.contains("\"id\":"));
             assert!(json.contains("\"package\":"));
@@ -242,7 +264,6 @@ mod tests {
             assert!(json.contains("\"details\":"));
             assert!(json.contains("\"kind\":"));
 
-            // Roundtrip check
             let restored: Node = serde_json::from_str(&json).expect("deserialize");
             assert_eq!(restored.id, original.id);
             assert_eq!(restored.node_type, original.node_type);

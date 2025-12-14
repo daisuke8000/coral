@@ -1,17 +1,22 @@
+//! Error types for the Coral library.
+
 use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum CoralError {
     #[error("Empty input: FileDescriptorSet binary is required")]
     EmptyInput,
-    #[error("Invalid protobuf binary format")]
+
+    #[error("Invalid protobuf binary format: {source}")]
     InvalidProtobuf {
         #[from]
         source: prost::DecodeError,
     },
+
     #[error("No proto files found in FileDescriptorSet")]
     NoProtoFiles,
-    #[error("I/O error: failed to read or write data")]
+
+    #[error("I/O error: {source}")]
     Io {
         #[from]
         source: std::io::Error,
@@ -39,7 +44,11 @@ mod tests {
         let err = CoralError::InvalidProtobuf {
             source: prost::DecodeError::new("invalid protobuf binary"),
         };
-        assert_eq!(err.to_string(), "Invalid protobuf binary format");
+        assert!(
+            err.to_string()
+                .starts_with("Invalid protobuf binary format:")
+        );
+        assert!(err.to_string().contains("invalid protobuf binary"));
     }
 
     #[test]
@@ -53,10 +62,8 @@ mod tests {
         let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "file not found");
         let coral_err: CoralError = io_err.into();
         assert!(matches!(coral_err, CoralError::Io { .. }));
-        assert_eq!(
-            coral_err.to_string(),
-            "I/O error: failed to read or write data"
-        );
+        assert!(coral_err.to_string().starts_with("I/O error:"));
+        assert!(coral_err.to_string().contains("file not found"));
         assert!(coral_err.source().is_some());
     }
 

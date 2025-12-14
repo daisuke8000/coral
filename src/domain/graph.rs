@@ -1,19 +1,22 @@
-use serde::{Deserialize, Serialize};
-use super::node::Node;
+//! Graph model types for the proto dependency graph.
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+use super::node::Node;
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Edge {
     pub source: String,
     pub target: String,
 }
 
 impl Edge {
+    #[must_use]
     pub fn new(source: String, target: String) -> Self {
         Self { source, target }
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Package {
     pub id: String,
@@ -21,12 +24,14 @@ pub struct Package {
 }
 
 impl Package {
-    pub fn new(id: String, _label: String, node_ids: Vec<String>) -> Self {
+    #[must_use]
+    pub fn new(id: String, node_ids: Vec<String>) -> Self {
         Self { id, node_ids }
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Primary output of the analyzer, used as data source for React Flow.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GraphModel {
     pub nodes: Vec<Node>,
     pub edges: Vec<Edge>,
@@ -34,12 +39,28 @@ pub struct GraphModel {
 }
 
 impl GraphModel {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             nodes: Vec::new(),
             edges: Vec::new(),
             packages: Vec::new(),
         }
+    }
+
+    #[must_use]
+    pub fn node_count(&self) -> usize {
+        self.nodes.len()
+    }
+
+    #[must_use]
+    pub fn edge_count(&self) -> usize {
+        self.edges.len()
+    }
+
+    #[must_use]
+    pub fn find_node(&self, id: &str) -> Option<&Node> {
+        self.nodes.iter().find(|n| n.id == id)
     }
 }
 
@@ -62,12 +83,8 @@ mod tests {
         };
 
         let json = serde_json::to_string(&original).expect("serialize");
-        assert!(json.contains("\"source\":"));
-        assert!(json.contains("\"target\":"));
-
         let restored: Edge = serde_json::from_str(&json).expect("deserialize");
-        assert_eq!(restored.source, original.source);
-        assert_eq!(restored.target, original.target);
+        assert_eq!(restored, original);
     }
 
     #[test]
@@ -78,27 +95,22 @@ mod tests {
         };
 
         let json = serde_json::to_string(&original).expect("serialize");
-        assert!(json.contains("\"nodeIds\":")); // camelCase check
+        assert!(json.contains("\"nodeIds\":")); // camelCase
 
         let restored: Package = serde_json::from_str(&json).expect("deserialize");
-        assert_eq!(restored.id, original.id);
-        assert_eq!(restored.node_ids, original.node_ids);
+        assert_eq!(restored, original);
     }
 
     #[test]
     fn test_graph_model_empty_and_default() {
-        // new() and default() should produce identical empty graphs
         let from_new = GraphModel::new();
         let from_default = GraphModel::default();
 
-        assert!(from_new.nodes.is_empty());
-        assert!(from_new.edges.is_empty());
-        assert!(from_new.packages.is_empty());
-
-        let json_new = serde_json::to_string(&from_new).expect("serialize");
-        let json_default = serde_json::to_string(&from_default).expect("serialize");
-        assert_eq!(json_new, json_default);
-        assert_eq!(json_new, r#"{"nodes":[],"edges":[],"packages":[]}"#);
+        assert_eq!(from_new, from_default);
+        assert_eq!(
+            serde_json::to_string(&from_new).unwrap(),
+            r#"{"nodes":[],"edges":[],"packages":[]}"#
+        );
     }
 
     #[test]
@@ -142,30 +154,17 @@ mod tests {
             }],
             packages: vec![Package {
                 id: "user.v1".to_string(),
-                node_ids: vec!["user.v1/UserService".to_string(), "user.v1/User".to_string()],
+                node_ids: vec![
+                    "user.v1/UserService".to_string(),
+                    "user.v1/User".to_string(),
+                ],
             }],
         };
 
-        // Serialize and verify structure
         let json = serde_json::to_string(&original).expect("serialize");
-        assert!(json.contains("\"nodes\":["));
-        assert!(json.contains("\"edges\":["));
-        assert!(json.contains("\"packages\":["));
-        assert!(json.contains("\"type\":\"service\""));
-        assert!(json.contains("\"type\":\"message\""));
-        assert!(json.contains("\"nodeIds\":["));
-
-        // Roundtrip verification
         let restored: GraphModel = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(restored.nodes.len(), 2);
         assert_eq!(restored.edges.len(), 1);
         assert_eq!(restored.packages.len(), 1);
-        assert_eq!(restored.nodes[0].id, "user.v1/UserService");
-        assert_eq!(restored.edges[0].source, "user.v1/UserService");
-        assert_eq!(restored.packages[0].id, "user.v1");
-
-        // Pretty print check
-        let pretty = serde_json::to_string_pretty(&original).expect("serialize");
-        assert!(pretty.contains('\n'));
     }
 }

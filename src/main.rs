@@ -1,15 +1,22 @@
 use anyhow::Result;
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 
 #[derive(Parser, Debug)]
-#[command(name = "coral", about = "Proto dependency visualizer")]
+#[command(
+    name = "coral",
+    version,
+    about = "Proto dependency visualizer for gRPC/Connect projects"
+)]
 struct Cli {
-    #[arg(long)]
-    debug: bool,
-    #[arg(long)]
-    summary: bool,
-    #[arg(long)]
-    json: bool,
+    #[arg(long, short, value_enum, default_value_t = OutputMode::Json)]
+    output: OutputMode,
+}
+
+#[derive(Clone, Debug, ValueEnum)]
+enum OutputMode {
+    Json,
+    Debug,
+    Summary,
 }
 
 #[tokio::main]
@@ -18,19 +25,29 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     let bytes = coral::read_stdin()?;
-
     let fds = coral::decoder::decode(&bytes)?;
 
-    let mut analyzer = coral::Analyzer::default();
-    let model = analyzer.analyze(&fds);
-    println!("{}", serde_json::to_string_pretty(&model)?);
+    match cli.output {
+        OutputMode::Json => {
+            let mut analyzer = coral::Analyzer::default();
+            let model = analyzer.analyze(&fds);
+            println!("{}", serde_json::to_string_pretty(&model)?);
+        }
+        OutputMode::Debug => {
+            coral::debug_output(&fds);
+        }
+        OutputMode::Summary => {
+            println!("Files: {}", fds.file.len());
 
-    if cli.debug {
-        coral::debug_output(&fds);
-    } else if cli.summary {
-        println!("Files: {}", fds.file.len());
+            let services = fds.file.iter().filter(|f| !f.service.is_empty()).count();
+            let messages = fds.file.iter().map(|f| f.message_type.len()).sum::<usize>();
+            let enums = fds.file.iter().map(|f| f.enum_type.len()).sum::<usize>();
+
+            println!("Services: {services}");
+            println!("Messages: {messages}");
+            println!("Enums: {enums}");
+        }
     }
-
 
     Ok(())
 }

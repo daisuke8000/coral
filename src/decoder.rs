@@ -1,3 +1,5 @@
+//! Protobuf decoder module.
+
 use crate::error::{CoralError, Result};
 use prost::Message;
 use prost_types::FileDescriptorSet;
@@ -7,8 +9,7 @@ pub fn decode(bytes: &[u8]) -> Result<FileDescriptorSet> {
         return Err(CoralError::EmptyInput);
     }
 
-    let fds =
-        FileDescriptorSet::decode(bytes).map_err(|e| CoralError::InvalidProtobuf { source: e })?;
+    let fds = FileDescriptorSet::decode(bytes)?;
 
     if fds.file.is_empty() {
         return Err(CoralError::NoProtoFiles);

@@ -124,7 +124,6 @@ mod tests {
             )],
             packages: vec![Package::new(
                 "user.v1".to_string(),
-                "user.v1".to_string(),
                 vec!["user.v1/user".to_string()],
             )],
         }
