@@ -3,6 +3,7 @@
 :root {
   --neon-magenta: #ff00ff;
   --neon-cyan: #00ffff;
+  --neon-yellow: #ffcc00;
   --neon-gray: #666666;
   --bg-dark: #0a0a0f;
   --bg-secondary: #141420;
@@ -123,6 +124,95 @@ body {
   border-color: rgba(255, 255, 255, 0.4);
 }
 
+.enum-node {
+  background: rgba(255, 204, 0, 0.1);
+  border: 2px solid var(--neon-yellow);
+  border-radius: 12px;
+  padding: 16px 20px;
+  min-width: 180px;
+  box-shadow:
+    0 0 10px var(--neon-yellow),
+    0 0 20px rgba(255, 204, 0, 0.4);
+  animation: pulse-yellow 4s ease-in-out infinite;
+  transition: all 0.3s ease;
+}
+
+.enum-node:hover {
+  box-shadow:
+    0 0 15px var(--neon-yellow),
+    0 0 30px var(--neon-yellow),
+    0 0 50px rgba(255, 204, 0, 0.4);
+  transform: scale(1.02);
+}
+
+/* Package Group Node */
+.package-group-node {
+  background: rgba(128, 128, 255, 0.1);
+  border: 2px solid #8080ff;
+  border-radius: 12px;
+  padding: 12px 16px;
+  min-width: 200px;
+  box-shadow:
+    0 0 10px rgba(128, 128, 255, 0.5),
+    0 0 20px rgba(128, 128, 255, 0.3);
+  transition: all 0.3s ease;
+}
+
+.package-group-node:hover {
+  box-shadow:
+    0 0 15px rgba(128, 128, 255, 0.6),
+    0 0 30px rgba(128, 128, 255, 0.4);
+  transform: scale(1.02);
+}
+
+.package-group-node .node-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.package-toggle {
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  padding: 4px;
+  font-size: 0.8rem;
+  transition: transform 0.2s ease;
+}
+
+.package-toggle:hover {
+  transform: scale(1.2);
+}
+
+.toggle-icon {
+  display: inline-block;
+  transition: transform 0.2s ease;
+}
+
+.package-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+}
+
+.package-group-node .node-icon {
+  font-size: 1.2rem;
+}
+
+.package-group-node .node-label {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: #8080ff;
+}
+
+.node-count {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-weight: 400;
+}
+
 .node-content {
   text-align: center;
 }
@@ -185,6 +275,21 @@ body {
   }
 }
 
+@keyframes pulse-yellow {
+  0%, 100% {
+    opacity: 1;
+    box-shadow:
+      0 0 10px var(--neon-yellow),
+      0 0 20px rgba(255, 204, 0, 0.4);
+  }
+  50% {
+    opacity: 0.9;
+    box-shadow:
+      0 0 8px var(--neon-yellow),
+      0 0 14px rgba(255, 204, 0, 0.3);
+  }
+}
+
 .neon-flow .react-flow__background {
   background-color: var(--bg-dark) !important;
 }
@@ -230,6 +335,67 @@ body {
   background: var(--bg-secondary) !important;
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
   border-radius: 8px !important;
+}
+
+/* Layout toggle button */
+.layout-panel {
+  margin: 8px !important;
+  display: flex;
+  gap: 8px;
+}
+
+.layout-toggle-button,
+.expand-all-button,
+.collapse-all-button {
+  background: var(--bg-secondary);
+  border: 1px solid var(--neon-cyan);
+  color: var(--neon-cyan);
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+
+.layout-toggle-button:hover,
+.expand-all-button:hover,
+.collapse-all-button:hover {
+  background: rgba(0, 255, 255, 0.1);
+  box-shadow: 0 0 10px var(--neon-cyan);
+}
+
+.layout-toggle-button:active,
+.expand-all-button:active,
+.collapse-all-button:active {
+  transform: scale(0.95);
+}
+
+.layout-toggle-button:disabled,
+.expand-all-button:disabled,
+.collapse-all-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  border-color: var(--neon-gray);
+  color: var(--neon-gray);
+}
+
+.layout-toggle-button:disabled:hover,
+.expand-all-button:disabled:hover,
+.collapse-all-button:disabled:hover {
+  background: var(--bg-secondary);
+  box-shadow: none;
+}
+
+
+/* Node position transition for smooth layout animation */
+.react-flow__node {
+  transition: transform 0.5s ease-out !important;
+}
+
+/* Disable transition during drag for responsive movement */
+.react-flow__node.dragging {
+  transition: none !important;
 }
 
 .loading-container,
@@ -329,6 +495,7 @@ body {
 
 .neon-flow .react-flow__node.dimmed .service-node,
 .neon-flow .react-flow__node.dimmed .message-node,
+.neon-flow .react-flow__node.dimmed .enum-node,
 .neon-flow .react-flow__node.dimmed .external-node {
   animation: none;
   box-shadow: none;
@@ -346,6 +513,13 @@ body {
     0 0 20px var(--neon-cyan),
     0 0 40px var(--neon-cyan),
     0 0 80px rgba(0, 255, 255, 0.5);
+}
+
+.neon-flow .react-flow__node.selected .enum-node {
+  box-shadow:
+    0 0 20px var(--neon-yellow),
+    0 0 40px var(--neon-yellow),
+    0 0 80px rgba(255, 204, 0, 0.5);
 }
 
 .detail-panel {
@@ -618,6 +792,11 @@ body {
   margin-left: 4px;
   font-size: 0.7em;
   opacity: 0.7;
+}
+
+.type-name {
+  color: var(--neon-cyan);
+  font-weight: 500;
 }
 
 .type-name-external {
