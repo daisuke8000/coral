@@ -183,6 +183,44 @@ coral/
 └── action.yml        # GitHub Action definition
 ```
 
+## Data Flow
+
+```mermaid
+flowchart LR
+    subgraph Input["📁 Input"]
+        Proto[".proto files"]
+        Buf["buf build -o -"]
+    end
+
+    subgraph Backend["🦀 Rust Backend"]
+        Decoder["decoder.rs<br/>(prost_types)"]
+        Analyzer["analyzer.rs"]
+        Server["server.rs<br/>(Axum)"]
+    end
+
+    subgraph Output["📤 Output"]
+        API["/api/graph"]
+        JSON["graph.json"]
+    end
+
+    subgraph Frontend["⚛️ React Frontend"]
+        Fetch["useGraphData"]
+        Flow["React Flow"]
+        UI["Interactive UI"]
+    end
+
+    Proto --> Buf
+    Buf -->|FileDescriptorSet| Decoder
+    Decoder --> Analyzer
+    Analyzer -->|GraphModel| Server
+    Analyzer -->|--output json| JSON
+    Server --> API
+    API -->|fetch| Fetch
+    JSON -.->|static mode| Fetch
+    Fetch --> Flow
+    Flow --> UI
+```
+
 ## License
 
 MIT
