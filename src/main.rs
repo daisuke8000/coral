@@ -8,6 +8,8 @@ struct Cli {
     debug: bool,
     #[arg(long)]
     summary: bool,
+    #[arg(long)]
+    json: bool,
 }
 
 #[tokio::main]
@@ -19,11 +21,16 @@ async fn main() -> Result<()> {
 
     let fds = coral::decoder::decode(&bytes)?;
 
+    let mut analyzer = coral::Analyzer::default();
+    let model = analyzer.analyze(&fds);
+    println!("{}", serde_json::to_string_pretty(&model)?);
+
     if cli.debug {
         coral::debug_output(&fds);
     } else if cli.summary {
         println!("Files: {}", fds.file.len());
     }
+
 
     Ok(())
 }

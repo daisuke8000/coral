@@ -1,7 +1,9 @@
 pub mod decoder;
 pub mod error;
 pub mod domain;
+pub mod analyzer;
 
+pub use analyzer::Analyzer;
 pub use domain::{Edge, GraphModel, Node, NodeDetails, NodeType, Package};
 pub use error::{CoralError, Result};
 

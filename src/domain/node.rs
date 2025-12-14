@@ -20,14 +20,30 @@ pub struct MethodSignature {
 #[serde(rename_all = "camelCase")]
 pub struct FieldInfo {
     pub name: String,
-    pub field_type: String,
+    pub number: i32,
+    pub type_name: String,
+    pub label: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EnumValue {
+    pub name: String,
+    pub number: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EnumInfo {
+    pub name: String,
+    pub values: Vec<EnumValue>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind")]
 pub enum NodeDetails {
     Service { methods: Vec<MethodSignature> },
-    Message { fields: Vec<FieldInfo> },
+    Message { fields: Vec<FieldInfo>, enums: Vec<EnumInfo> },
     External,
 }
 
@@ -94,15 +110,40 @@ mod tests {
     fn test_field_info_roundtrip() {
         let original = FieldInfo {
             name: "user_id".to_string(),
-            field_type: "string".to_string(),
+            number: 1,
+            type_name: "string".to_string(),
+            label: "optional".to_string(),
         };
 
         let json = serde_json::to_string(&original).expect("serialize");
-        assert!(json.contains("\"fieldType\":")); // camelCase check
+        assert!(json.contains("\"typeName\":")); // camelCase check
+        assert!(json.contains("\"number\":"));
 
         let restored: FieldInfo = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(restored.name, original.name);
-        assert_eq!(restored.field_type, original.field_type);
+        assert_eq!(restored.number, original.number);
+        assert_eq!(restored.type_name, original.type_name);
+        assert_eq!(restored.label, original.label);
+    }
+
+    #[test]
+    fn test_enum_info_roundtrip() {
+        let original = EnumInfo {
+            name: "Status".to_string(),
+            values: vec![
+                EnumValue { name: "UNKNOWN".to_string(), number: 0 },
+                EnumValue { name: "ACTIVE".to_string(), number: 1 },
+            ],
+        };
+
+        let json = serde_json::to_string(&original).expect("serialize");
+        assert!(json.contains("\"values\":["));
+
+        let restored: EnumInfo = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(restored.name, original.name);
+        assert_eq!(restored.values.len(), 2);
+        assert_eq!(restored.values[0].name, "UNKNOWN");
+        assert_eq!(restored.values[1].number, 1);
     }
 
     #[test]
@@ -123,12 +164,19 @@ mod tests {
         let message = NodeDetails::Message {
             fields: vec![FieldInfo {
                 name: "id".to_string(),
-                field_type: "string".to_string(),
+                number: 1,
+                type_name: "string".to_string(),
+                label: "optional".to_string(),
+            }],
+            enums: vec![EnumInfo {
+                name: "Status".to_string(),
+                values: vec![EnumValue { name: "UNKNOWN".to_string(), number: 0 }],
             }],
         };
         let json = serde_json::to_string(&message).expect("serialize");
         assert!(json.contains("\"kind\":\"Message\""));
         assert!(json.contains("\"fields\":["));
+        assert!(json.contains("\"enums\":["));
 
         // External variant
         let external = NodeDetails::External;
@@ -164,8 +212,11 @@ mod tests {
                 NodeDetails::Message {
                     fields: vec![FieldInfo {
                         name: "id".to_string(),
-                        field_type: "string".to_string(),
+                        number: 1,
+                        type_name: "string".to_string(),
+                        label: "optional".to_string(),
                     }],
+                    enums: vec![],
                 },
             ),
             // External node

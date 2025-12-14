@@ -7,11 +7,23 @@ pub struct Edge {
     pub target: String,
 }
 
+impl Edge {
+    pub fn new(source: String, target: String) -> Self {
+        Self { source, target }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Package {
     pub id: String,
     pub node_ids: Vec<String>,
+}
+
+impl Package {
+    pub fn new(id: String, _label: String, node_ids: Vec<String>) -> Self {
+        Self { id, node_ids }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -116,8 +128,11 @@ mod tests {
                     NodeDetails::Message {
                         fields: vec![FieldInfo {
                             name: "id".to_string(),
-                            field_type: "string".to_string(),
+                            number: 1,
+                            type_name: "string".to_string(),
+                            label: "optional".to_string(),
                         }],
+                        enums: vec![],
                     },
                 ),
             ],
