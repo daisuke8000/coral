@@ -12,4 +12,4 @@ pub mod graph;
 pub mod node;
 
 pub use graph::{Edge, GraphModel, Package};
-pub use node::{EnumInfo, EnumValue, FieldInfo, MethodSignature, Node, NodeDetails, NodeType};
+pub use node::{EnumInfo, EnumValue, FieldInfo, MessageDef, MethodSignature, Node, NodeDetails, NodeType};

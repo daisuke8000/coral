@@ -41,12 +41,21 @@ pub struct EnumInfo {
     pub values: Vec<EnumValue>,
 }
 
+/// Message definition with its fields (for Service nodes).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MessageDef {
+    pub name: String,
+    pub fields: Vec<FieldInfo>,
+}
+
 /// Uses `#[serde(tag = "kind")]` for TypeScript discriminated unions.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind")]
 pub enum NodeDetails {
     Service {
         methods: Vec<MethodSignature>,
+        messages: Vec<MessageDef>,
     },
     Message {
         fields: Vec<FieldInfo>,
@@ -180,10 +189,20 @@ mod tests {
                 input_type: "Req".to_string(),
                 output_type: "Res".to_string(),
             }],
+            messages: vec![MessageDef {
+                name: "Req".to_string(),
+                fields: vec![FieldInfo {
+                    name: "id".to_string(),
+                    number: 1,
+                    type_name: "string".to_string(),
+                    label: "optional".to_string(),
+                }],
+            }],
         };
         let json = serde_json::to_string(&service).expect("serialize");
         assert!(json.contains("\"kind\":\"Service\""));
         assert!(json.contains("\"methods\":["));
+        assert!(json.contains("\"messages\":["));
 
         let message = NodeDetails::Message {
             fields: vec![FieldInfo {
@@ -224,6 +243,15 @@ mod tests {
                         name: "GetUser".to_string(),
                         input_type: "GetUserRequest".to_string(),
                         output_type: "User".to_string(),
+                    }],
+                    messages: vec![MessageDef {
+                        name: "GetUserRequest".to_string(),
+                        fields: vec![FieldInfo {
+                            name: "user_id".to_string(),
+                            number: 1,
+                            type_name: "string".to_string(),
+                            label: "optional".to_string(),
+                        }],
                     }],
                 },
             ),
