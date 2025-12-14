@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
+import { MOBILE_BREAKPOINT } from '@/constants/layout';
 
-const MOBILE_BREAKPOINT = 768;
+const RESIZE_DEBOUNCE_MS = 150;
 
 export function useIsMobile() {
   const [isMobile, setIsMobile] = useState(
@@ -8,9 +9,20 @@ export function useIsMobile() {
   );
 
   useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
+    let timeoutId: ReturnType<typeof setTimeout>;
+
+    const handleResize = () => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
+      }, RESIZE_DEBOUNCE_MS);
+    };
+
     window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    return () => {
+      clearTimeout(timeoutId);
+      window.removeEventListener('resize', handleResize);
+    };
   }, []);
 
   return isMobile;
