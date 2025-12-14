@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Setup Rust
-        uses: dtolnay/rust-action@stable
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Cache cargo
         uses: actions/cache@v4
@@ -83,7 +83,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Setup Rust
-        uses: dtolnay/rust-action@stable
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Setup buf
         uses: bufbuild/buf-setup-action@v1
@@ -98,3 +98,38 @@ jobs:
           buf build -o - | ../target/release/coral --output json > graph.json
           echo "Generated graph.json:"
           head -50 graph.json
+
+  action-test:
+    name: GitHub Action Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test Action (JSON only)
+        uses: ./
+        with:
+          proto-path: 'sandbox'
+          output-path: 'test-output'
+
+      - name: Verify JSON output
+        run: |
+          echo "=== JSON Output ==="
+          cat test-output/graph.json | head -50
+          echo ""
+          echo "=== File exists check ==="
+          ls -la test-output/
+
+      - name: Test Action (with Pages)
+        uses: ./
+        with:
+          proto-path: 'sandbox'
+          output-path: 'test-pages-output'
+          generate-pages: 'true'
+
+      - name: Verify Pages output
+        run: |
+          echo "=== Pages Output ==="
+          ls -la test-pages-output/html/
+          echo ""
+          echo "=== index.html exists ==="
+          head -20 test-pages-output/html/index.html

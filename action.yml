@@ -61,8 +61,7 @@ runs:
         github_token: ${{ inputs.github-token }}
 
     - name: Setup Rust toolchain
-      uses: dtolnay/rust-action@stable
-      shell: bash
+      uses: dtolnay/rust-toolchain@stable
 
     - name: Cache Coral build
       uses: actions/cache@v4
