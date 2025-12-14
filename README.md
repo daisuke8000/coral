@@ -38,6 +38,8 @@ buf build -o - | coral --output json > graph.json
 
 Add Coral to your workflow to automatically analyze proto dependencies on every PR:
 
+> **Note**: The first run may take 3-5 minutes as it builds the Rust binary. Subsequent runs with caching will be faster.
+
 ```yaml
 # .github/workflows/proto-analysis.yml
 name: Proto Analysis
@@ -58,7 +60,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Analyze Proto Dependencies
-        uses: daisuke8000/coral@v1
+        uses: daisuke8000/coral@v0.1.0
         with:
           proto-path: 'proto'
           comment-on-pr: 'true'
@@ -112,7 +114,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Generate Pages
-        uses: daisuke8000/coral@v1
+        uses: daisuke8000/coral@v0.1.0
         with:
           proto-path: 'proto'
           generate-pages: 'true'

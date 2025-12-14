@@ -155,13 +155,18 @@ runs:
     - name: Post PR Comment
       if: inputs.comment-on-pr == 'true' && github.event_name == 'pull_request'
       uses: actions/github-script@v7
+      env:
+        SUMMARY: ${{ steps.generate.outputs.summary }}
+        FILES_COUNT: ${{ steps.generate.outputs.files-count }}
+        SERVICES_COUNT: ${{ steps.generate.outputs.services-count }}
+        MESSAGES_COUNT: ${{ steps.generate.outputs.messages-count }}
       with:
         github-token: ${{ inputs.github-token }}
         script: |
-          const summary = `${{ steps.generate.outputs.summary }}`;
-          const filesCount = `${{ steps.generate.outputs.files-count }}`;
-          const servicesCount = `${{ steps.generate.outputs.services-count }}`;
-          const messagesCount = `${{ steps.generate.outputs.messages-count }}`;
+          const summary = process.env.SUMMARY;
+          const filesCount = process.env.FILES_COUNT;
+          const servicesCount = process.env.SERVICES_COUNT;
+          const messagesCount = process.env.MESSAGES_COUNT;
 
           const body = `## 🪸 Coral Proto Dependency Analysis
 
