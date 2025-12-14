@@ -100,8 +100,7 @@ runs:
             "${{ github.workspace }}/${{ inputs.output-path }}/graph.json"
         fi
 
-        # Generate summary
-        cd "${{ inputs.proto-path }}"
+        # Generate summary (already in proto-path)
         if [ -n "${{ inputs.buf-config }}" ]; then
           SUMMARY=$(buf build --config "${{ inputs.buf-config }}" -o - | \
             "${{ github.action_path }}/target/release/coral" --output summary)
