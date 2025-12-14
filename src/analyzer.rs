@@ -6,7 +6,7 @@ use prost_types::FileDescriptorSet;
 use prost_types::field_descriptor_proto::{Label, Type};
 
 use crate::domain::{
-    Edge, EnumInfo, EnumValue, FieldInfo, GraphModel, MethodSignature, Node, NodeDetails, NodeType,
+    Edge, EnumInfo, EnumValue, FieldInfo, GraphModel, MessageDef, MethodSignature, Node, NodeDetails, NodeType,
     Package,
 };
 
@@ -110,7 +110,27 @@ impl Analyzer {
                         })
                     })
                     .collect();
-                NodeDetails::Service { methods }
+
+                // Extract message definitions (Request/Response types)
+                let messages = file
+                    .message_type
+                    .iter()
+                    .map(|m| MessageDef {
+                        name: m.name.clone().unwrap_or_default(),
+                        fields: m
+                            .field
+                            .iter()
+                            .map(|f| FieldInfo {
+                                name: f.name.clone().unwrap_or_default(),
+                                number: f.number.unwrap_or(0),
+                                type_name: Self::type_to_string(f.r#type, f.type_name.as_ref()),
+                                label: Self::label_to_string(f.label),
+                            })
+                            .collect(),
+                    })
+                    .collect();
+
+                NodeDetails::Service { methods, messages }
             }
             NodeType::Message => {
                 let fields = file
