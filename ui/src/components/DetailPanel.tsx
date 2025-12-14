@@ -6,6 +6,7 @@ import type {
   EnumValue,
   MessageDef,
 } from '@/types/graph';
+import { useIsMobile } from '@/hooks/useIsMobile';
 
 interface DetailPanelProps {
   node: GraphNode | null;
@@ -20,56 +21,125 @@ export function DetailPanel({ node, onClose }: DetailPanelProps) {
   const [panelWidth, setPanelWidth] = useState(DEFAULT_WIDTH);
   const [isDragging, setIsDragging] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
+  const isMobile = useIsMobile();
 
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+  // Pointer events for touch support
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
     e.preventDefault();
     setIsDragging(true);
+    // Capture pointer for drag outside element
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
   }, []);
 
   useEffect(() => {
     if (!isDragging) return;
 
-    const handleMouseMove = (e: MouseEvent) => {
+    const handlePointerMove = (e: PointerEvent) => {
       const maxWidth = window.innerWidth * MAX_WIDTH_RATIO;
       const newWidth = window.innerWidth - e.clientX;
       setPanelWidth(Math.max(MIN_WIDTH, Math.min(maxWidth, newWidth)));
     };
 
-    const handleMouseUp = () => {
+    const handlePointerUp = () => {
       setIsDragging(false);
     };
 
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener('pointermove', handlePointerMove);
+    document.addEventListener('pointerup', handlePointerUp);
+    document.addEventListener('pointercancel', handlePointerUp);
 
     return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('pointermove', handlePointerMove);
+      document.removeEventListener('pointerup', handlePointerUp);
+      document.removeEventListener('pointercancel', handlePointerUp);
     };
   }, [isDragging]);
+
+  // Handle swipe down to close on mobile
+  const [touchStartY, setTouchStartY] = useState<number | null>(null);
+
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    setTouchStartY(e.touches[0].clientY);
+  }, []);
+
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (touchStartY === null) return;
+    const touchEndY = e.changedTouches[0].clientY;
+    const deltaY = touchEndY - touchStartY;
+    // Swipe down more than 100px to close
+    if (deltaY > 100) {
+      onClose();
+    }
+    setTouchStartY(null);
+  }, [touchStartY, onClose]);
 
   if (!node) return null;
 
   return (
     <div
       ref={panelRef}
-      className={`detail-panel ${isDragging ? 'dragging' : ''}`}
-      style={{ width: panelWidth }}
+      className={`
+        detail-panel
+        absolute z-[100] bg-bg-dark/95 overflow-y-auto
+        border-neon-cyan shadow-[-4px_0_20px_rgba(0,255,255,0.1)]
+
+        /* Desktop: Right side panel */
+        right-0 top-0 h-full min-w-[280px] max-w-[80vw]
+        border-l animate-slide-in-right
+
+        /* Mobile: Bottom sheet */
+        max-sm:fixed max-sm:inset-x-0 max-sm:top-auto max-sm:bottom-0
+        max-sm:h-[70vh] max-sm:max-h-[70vh] max-sm:w-full max-sm:min-w-full max-sm:max-w-full
+        max-sm:border-l-0 max-sm:border-t max-sm:rounded-t-2xl
+        max-sm:animate-slide-in-up
+
+        ${isDragging ? 'select-none' : ''}
+      `}
+      style={!isMobile ? { width: panelWidth } : undefined}
+      onTouchStart={isMobile ? handleTouchStart : undefined}
+      onTouchEnd={isMobile ? handleTouchEnd : undefined}
     >
-      <div
-        className={`resize-handle ${isDragging ? 'active' : ''}`}
-        onMouseDown={handleMouseDown}
-      />
-      <div className="panel-header">
-        <h2>{node.label}</h2>
-        <button className="close-button" onClick={onClose} aria-label="Close">
+      {/* Mobile drag handle indicator */}
+      {isMobile && (
+        <div className="flex justify-center pt-3 pb-1">
+          <div className="w-10 h-1 bg-white/30 rounded-full" />
+        </div>
+      )}
+
+      {/* Desktop resize handle */}
+      {!isMobile && (
+        <div
+          className={`
+            absolute left-0 top-0 w-1 h-full cursor-ew-resize
+            bg-neon-cyan/30 hover:bg-neon-cyan/60
+            transition-colors duration-200 touch-none
+            ${isDragging ? 'bg-neon-cyan/80' : ''}
+          `}
+          onPointerDown={handlePointerDown}
+        />
+      )}
+
+      {/* Header */}
+      <div className="flex items-center justify-between p-3 sm:p-4 border-b border-white/10 sticky top-0 bg-bg-dark/95 backdrop-blur-sm z-10">
+        <h2 className="text-base sm:text-lg font-bold text-neon-cyan truncate pr-2">{node.label}</h2>
+        <button
+          className="min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 sm:w-8 sm:h-8 flex items-center justify-center
+                     text-xl sm:text-2xl text-text-secondary hover:text-white
+                     bg-transparent hover:bg-white/10 rounded-lg
+                     transition-colors duration-200 touch-manipulation"
+          onClick={onClose}
+          aria-label="Close"
+        >
           ×
         </button>
       </div>
-      <div className="panel-content">
-        <div className="panel-meta">
-          <span className="file-path">{node.file}</span>
-          <span className="package-name">{node.package}</span>
+
+      {/* Content */}
+      <div className="p-3 sm:p-4 space-y-4">
+        {/* Meta info */}
+        <div className="flex flex-col gap-1 text-xs sm:text-sm">
+          <span className="text-text-secondary break-all font-mono">{node.file}</span>
+          <span className="text-neon-cyan/70 break-all">{node.package}</span>
         </div>
 
         {node.details.kind === 'Service' && (
@@ -88,8 +158,8 @@ export function DetailPanel({ node, onClose }: DetailPanelProps) {
         )}
 
         {node.details.kind === 'External' && (
-          <div className="detail-section">
-            <p className="external-note">External library - no additional details</p>
+          <div className="py-4">
+            <p className="text-text-secondary text-sm italic">External library - no additional details</p>
           </div>
         )}
       </div>
@@ -130,15 +200,21 @@ function ServiceDetails({
       return (
         <button
           type="button"
-          className={`type-link ${isExpanded ? 'expanded' : ''}`}
+          className={`
+            inline-flex items-center gap-1 px-1.5 py-0.5 rounded
+            text-neon-cyan hover:text-white hover:bg-neon-cyan/20
+            transition-colors duration-200 text-xs sm:text-sm
+            min-h-[32px] sm:min-h-0 touch-manipulation
+            ${isExpanded ? 'bg-neon-cyan/10' : ''}
+          `}
           onClick={() => toggleType(typeName)}
         >
           {typeName}
-          <span className="expand-icon">{isExpanded ? '▼' : '▶'}</span>
+          <span className="text-[0.65rem] sm:text-xs opacity-70">{isExpanded ? '▼' : '▶'}</span>
         </button>
       );
     }
-    return <span className="type-name-external">{typeName}</span>;
+    return <span className="text-text-secondary text-xs sm:text-sm">{typeName}</span>;
   };
 
   const renderExpandedFields = (typeName: string) => {
@@ -147,21 +223,21 @@ function ServiceDetails({
     if (!messageDef) return null;
 
     return (
-      <div className="expanded-fields">
-        <table className="field-table compact">
+      <div className="mt-2 ml-2 sm:ml-4 p-2 bg-white/5 rounded-lg border border-white/10 animate-slide-down overflow-x-auto">
+        <table className="w-full text-xs sm:text-sm">
           <thead>
-            <tr>
-              <th>#</th>
-              <th>Name</th>
-              <th>Type</th>
+            <tr className="text-text-secondary text-left">
+              <th className="p-1 sm:p-1.5 w-8">#</th>
+              <th className="p-1 sm:p-1.5">Name</th>
+              <th className="p-1 sm:p-1.5">Type</th>
             </tr>
           </thead>
           <tbody>
             {messageDef.fields.map((f) => (
-              <tr key={`${f.number}-${f.name}`}>
-                <td className="field-number">{f.number}</td>
-                <td className="field-name">{f.name}</td>
-                <td className="field-type">{f.typeName}</td>
+              <tr key={`${f.number}-${f.name}`} className="border-t border-white/5">
+                <td className="p-1 sm:p-1.5 text-text-secondary font-mono">{f.number}</td>
+                <td className="p-1 sm:p-1.5 text-white font-medium">{f.name}</td>
+                <td className="p-1 sm:p-1.5 text-neon-cyan/80 font-mono">{f.typeName}</td>
               </tr>
             ))}
           </tbody>
@@ -171,18 +247,25 @@ function ServiceDetails({
   };
 
   return (
-    <div className="detail-section">
-      <h3>⚡ RPC Methods ({methods.length})</h3>
+    <div className="space-y-3">
+      <h3 className="text-sm sm:text-base font-semibold text-neon-magenta flex items-center gap-2">
+        <span>⚡</span>
+        <span>RPC Methods ({methods.length})</span>
+      </h3>
       {methods.length === 0 ? (
-        <p className="empty-note">No methods defined</p>
+        <p className="text-text-secondary text-sm italic">No methods defined</p>
       ) : (
-        <ul className="method-list">
+        <ul className="space-y-3">
           {methods.map((m) => (
-            <li key={m.name} className="method-item">
-              <div className="method-header">
-                <span className="method-name">{m.name}</span>
-                <span className="method-sig">
-                  ({renderTypeLink(m.inputType)}) → {renderTypeLink(m.outputType)}
+            <li key={m.name} className="p-2 sm:p-3 bg-white/5 rounded-lg border border-white/10">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+                <span className="font-semibold text-white text-sm sm:text-base">{m.name}</span>
+                <span className="text-xs sm:text-sm text-text-secondary flex items-center flex-wrap gap-1">
+                  <span>(</span>
+                  {renderTypeLink(m.inputType)}
+                  <span>)</span>
+                  <span className="mx-1">→</span>
+                  {renderTypeLink(m.outputType)}
                 </span>
               </div>
               {renderExpandedFields(m.inputType)}
@@ -197,26 +280,31 @@ function ServiceDetails({
 
 function MessageDetails({ fields }: { fields: FieldInfo[] }) {
   return (
-    <div className="detail-section">
-      <h3>📦 Fields ({fields.length})</h3>
+    <div className="space-y-3">
+      <h3 className="text-sm sm:text-base font-semibold text-neon-cyan flex items-center gap-2">
+        <span>📦</span>
+        <span>Fields ({fields.length})</span>
+      </h3>
       {fields.length === 0 ? (
-        <p className="empty-note">No fields defined</p>
+        <p className="text-text-secondary text-sm italic">No fields defined</p>
       ) : (
-        <div className="field-table-container">
-          <table className="field-table">
+        <div className="overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0">
+          <table className="w-full text-xs sm:text-sm min-w-[250px]">
             <thead>
-              <tr>
-                <th>#</th>
-                <th>Name</th>
-                <th>Type</th>
+              <tr className="text-text-secondary text-left border-b border-white/20">
+                <th className="p-2 w-10">#</th>
+                <th className="p-2">Name</th>
+                <th className="p-2">Type</th>
               </tr>
             </thead>
             <tbody>
               {fields.map((f) => (
-                <tr key={`${f.number}-${f.name}`}>
-                  <td className="field-number">{f.number}</td>
-                  <td className="field-name">{f.name}</td>
-                  <td className={`field-type ${f.label}`}>{f.typeName}</td>
+                <tr key={`${f.number}-${f.name}`} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                  <td className="p-2 text-text-secondary font-mono">{f.number}</td>
+                  <td className="p-2 text-white font-medium">{f.name}</td>
+                  <td className={`p-2 font-mono ${f.label === 'repeated' ? 'text-neon-yellow' : 'text-neon-cyan/80'}`}>
+                    {f.typeName}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -229,16 +317,19 @@ function MessageDetails({ fields }: { fields: FieldInfo[] }) {
 
 function EnumDetails({ values }: { values: EnumValue[] }) {
   return (
-    <div className="detail-section">
-      <h3>📋 Values ({values.length})</h3>
+    <div className="space-y-3">
+      <h3 className="text-sm sm:text-base font-semibold text-neon-yellow flex items-center gap-2">
+        <span>📋</span>
+        <span>Values ({values.length})</span>
+      </h3>
       {values.length === 0 ? (
-        <p className="empty-note">No values defined</p>
+        <p className="text-text-secondary text-sm italic">No values defined</p>
       ) : (
-        <ul className="enum-values">
+        <ul className="space-y-1">
           {values.map((v) => (
-            <li key={v.number}>
-              <span className="enum-value-name">{v.name}</span>
-              <span className="enum-value-number"> = {v.number}</span>
+            <li key={v.number} className="flex items-center justify-between p-2 hover:bg-white/5 rounded transition-colors">
+              <span className="text-white text-sm sm:text-base font-medium">{v.name}</span>
+              <span className="text-text-secondary text-xs sm:text-sm font-mono">= {v.number}</span>
             </li>
           ))}
         </ul>

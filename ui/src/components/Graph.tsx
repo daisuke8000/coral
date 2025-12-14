@@ -26,6 +26,7 @@ import { DetailPanel } from '@/components/DetailPanel';
 import { useSelection } from '@/hooks/useSelection';
 import { useAutoLayout } from '@/hooks/useAutoLayout';
 import { usePackageGroups } from '@/hooks/usePackageGroups';
+import { useIsMobile } from '@/hooks/useIsMobile';
 import type { GraphData, NodeData, NodeType } from '@/types/graph';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -45,6 +46,24 @@ interface CalculateLayoutOptions {
   expandedPackages: Set<string>;
   togglePackage: (packageId: string) => void;
 }
+
+// MiniMap node color mapping (memoized outside component)
+const getNodeColor = (node: Node): string => {
+  switch (node.type) {
+    case 'service':
+      return '#ff00ff';
+    case 'message':
+      return '#00ffff';
+    case 'enum':
+      return '#ffcc00';
+    case 'external':
+      return '#666666';
+    case 'package':
+      return '#8080ff';
+    default:
+      return '#ffffff';
+  }
+};
 
 function calculateLayout(
   data: GraphData,
@@ -193,6 +212,7 @@ export function Graph({ data }: GraphProps) {
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const { getLayoutedNodes } = useAutoLayout();
   const [layoutMode, setLayoutMode] = useState<'flat' | 'auto'>('flat');
+  const isMobile = useIsMobile();
 
   // Update nodes when expanded packages change
   useEffect(() => {
@@ -221,7 +241,7 @@ export function Graph({ data }: GraphProps) {
         return {
           ...edge,
           style: highlighted
-            ? { stroke: 'var(--neon-cyan)', strokeWidth: 3 }
+            ? { stroke: 'var(--color-neon-cyan)', strokeWidth: 3 }
             : { stroke: 'rgba(255, 255, 255, 0.1)', strokeWidth: 1 },
           animated: highlighted,
         };
@@ -265,8 +285,19 @@ export function Graph({ data }: GraphProps) {
   const isAllExpanded = expandedCount === totalPackages;
   const isAllCollapsed = expandedCount === 0;
 
+  // Common button styles
+  const buttonBaseStyles = `
+    min-h-[44px] px-3 py-2 sm:min-h-0 sm:px-4 sm:py-1.5
+    bg-bg-secondary border border-neon-cyan/50 text-neon-cyan
+    rounded-md text-xs sm:text-sm font-medium
+    hover:bg-neon-cyan/10 hover:border-neon-cyan
+    hover:shadow-[0_0_10px_rgba(0,255,255,0.3)]
+    active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed
+    touch-manipulation transition-all duration-300
+  `;
+
   return (
-    <div className="graph-container">
+    <div className="relative flex-1 w-full h-full overflow-hidden">
       <ReactFlow
         nodes={styledNodes}
         edges={styledEdges}
@@ -279,6 +310,11 @@ export function Graph({ data }: GraphProps) {
         fitView
         attributionPosition="bottom-left"
         className="neon-flow"
+        minZoom={0.1}
+        maxZoom={2}
+        panOnScroll={true}
+        zoomOnPinch={true}
+        preventScrolling={true}
       >
         <Background
           variant={BackgroundVariant.Dots}
@@ -287,49 +323,42 @@ export function Graph({ data }: GraphProps) {
           color="rgba(255, 255, 255, 0.1)"
         />
         <Controls className="neon-controls" />
-        <MiniMap
-          className="neon-minimap"
-          nodeColor={(node) => {
-            switch (node.type) {
-              case 'service':
-                return '#ff00ff';
-              case 'message':
-                return '#00ffff';
-              case 'enum':
-                return '#ffcc00';
-              case 'external':
-                return '#666666';
-              case 'package':
-                return '#8080ff';
-              default:
-                return '#ffffff';
-            }
-          }}
-          maskColor="rgba(10, 10, 15, 0.8)"
-        />
-        <Panel position="top-right" className="layout-panel">
+        {/* MiniMap hidden on tablet and below */}
+        {!isMobile && (
+          <MiniMap
+            className="neon-minimap"
+            nodeColor={getNodeColor}
+            maskColor="rgba(10, 10, 15, 0.8)"
+          />
+        )}
+        <Panel position="top-right" className="m-2 flex flex-col sm:flex-row gap-2">
           <button
-            className="expand-all-button"
+            className={buttonBaseStyles}
             onClick={expandAll}
             disabled={isAllExpanded}
             title="Expand all packages"
           >
-            📂 Expand All
+            <span className="sm:hidden">📂</span>
+            <span className="hidden sm:inline">📂 Expand All</span>
           </button>
           <button
-            className="collapse-all-button"
+            className={buttonBaseStyles}
             onClick={collapseAll}
             disabled={isAllCollapsed}
             title="Collapse all packages"
           >
-            📁 Collapse All
+            <span className="sm:hidden">📁</span>
+            <span className="hidden sm:inline">📁 Collapse All</span>
           </button>
           <button
-            className="layout-toggle-button"
+            className={buttonBaseStyles}
             onClick={handleLayoutToggle}
             title={layoutMode === 'flat' ? 'Switch to hierarchical layout' : 'Switch to flat layout'}
           >
-            {layoutMode === 'flat' ? '📊 AutoLayout' : '📋 FlatLayout'}
+            <span className="sm:hidden">{layoutMode === 'flat' ? '📊' : '📋'}</span>
+            <span className="hidden sm:inline">
+              {layoutMode === 'flat' ? '📊 AutoLayout' : '📋 FlatLayout'}
+            </span>
           </button>
         </Panel>
       </ReactFlow>
