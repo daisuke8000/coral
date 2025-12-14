@@ -1,6 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { GraphData } from '@/types/graph';
 
+// Static mode: load from JSON file (for GitHub Pages)
+// Server mode: load from API endpoint (default)
+const STATIC_MODE = import.meta.env.VITE_STATIC_MODE === 'true';
+const GRAPH_DATA_URL = import.meta.env.VITE_GRAPH_DATA_URL || './graph.json';
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 export function useGraphData() {
@@ -21,7 +25,10 @@ export function useGraphData() {
       setError(null);
 
       try {
-        const response = await fetch(`${API_BASE}/api/graph`, {
+        // Choose URL based on mode
+        const url = STATIC_MODE ? GRAPH_DATA_URL : `${API_BASE}/api/graph`;
+
+        const response = await fetch(url, {
           signal: controller.signal,
         });
         if (!response.ok) {
