@@ -23,11 +23,22 @@ import {
   type PackageNodeData,
 } from '@/components/nodes';
 import { DetailPanel } from '@/components/DetailPanel';
+import { PackageFilterPanel } from '@/components/PackageFilterPanel';
 import { useSelection } from '@/hooks/useSelection';
 import { useAutoLayout } from '@/hooks/useAutoLayout';
 import { usePackageGroups } from '@/hooks/usePackageGroups';
+import { usePackageVisibility } from '@/hooks/usePackageVisibility';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import type { GraphData, NodeData, NodeType } from '@/types/graph';
+import {
+  NEON_MAGENTA,
+  NEON_CYAN,
+  NEON_YELLOW,
+  NEON_GRAY,
+  NEON_PURPLE,
+  NEON_WHITE,
+} from '@/constants/layout';
+import { BUTTON_BASE_STYLES } from '@/constants/styles';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const nodeTypes: Record<string, any> = {
@@ -45,23 +56,25 @@ interface GraphProps {
 interface CalculateLayoutOptions {
   expandedPackages: Set<string>;
   togglePackage: (packageId: string) => void;
+  visiblePackages: Set<string>;
+  nodeToPackageMap: Map<string, string>;
 }
 
 // MiniMap node color mapping (memoized outside component)
 const getNodeColor = (node: Node): string => {
   switch (node.type) {
     case 'service':
-      return '#ff00ff';
+      return NEON_MAGENTA;
     case 'message':
-      return '#00ffff';
+      return NEON_CYAN;
     case 'enum':
-      return '#ffcc00';
+      return NEON_YELLOW;
     case 'external':
-      return '#666666';
+      return NEON_GRAY;
     case 'package':
-      return '#8080ff';
+      return NEON_PURPLE;
     default:
-      return '#ffffff';
+      return NEON_WHITE;
   }
 };
 
@@ -69,11 +82,12 @@ function calculateLayout(
   data: GraphData,
   options: CalculateLayoutOptions
 ): { nodes: Node[]; edges: Edge[] } {
-  const { expandedPackages, togglePackage } = options;
+  const { expandedPackages, togglePackage, visiblePackages, nodeToPackageMap } = options;
   const packageMap = new Map<string, typeof data.nodes>();
 
-  // Group nodes by package
+  // Group nodes by package (only visible packages)
   data.nodes.forEach((node) => {
+    if (!visiblePackages.has(node.package)) return;
     const existing = packageMap.get(node.package) || [];
     existing.push(node);
     packageMap.set(node.package, existing);
@@ -144,19 +158,18 @@ function calculateLayout(
     packageX += packageWidth + packagePadding;
   });
 
-  // Build node to package mapping for edge routing
-  const nodeToPackage = new Map<string, string>();
-  data.nodes.forEach((node) => {
-    nodeToPackage.set(node.id, node.package);
-  });
-
-  // Create edges with smart routing
+  // Create edges with smart routing (filter by visible packages)
   const edgeSet = new Set<string>();
   const edges: Edge[] = [];
 
   data.edges.forEach((edge, index) => {
-    const sourcePackage = nodeToPackage.get(edge.source);
-    const targetPackage = nodeToPackage.get(edge.target);
+    const sourcePackage = nodeToPackageMap.get(edge.source);
+    const targetPackage = nodeToPackageMap.get(edge.target);
+
+    // Skip edges where either endpoint's package is hidden
+    if (sourcePackage && !visiblePackages.has(sourcePackage)) return;
+    if (targetPackage && !visiblePackages.has(targetPackage)) return;
+
     const sourceExpanded = sourcePackage ? expandedPackages.has(sourcePackage) : true;
     const targetExpanded = targetPackage ? expandedPackages.has(targetPackage) : true;
 
@@ -203,9 +216,26 @@ export function Graph({ data }: GraphProps) {
     totalPackages,
   } = usePackageGroups(data);
 
+  const {
+    visiblePackages,
+    togglePackageVisibility,
+    showAllPackages,
+    hideAllPackages,
+  } = usePackageVisibility(data);
+
+  const [filterPanelOpen, setFilterPanelOpen] = useState(false);
+
+  const nodeToPackageMap = useMemo(() => {
+    const map = new Map<string, string>();
+    data.nodes.forEach((node) => {
+      map.set(node.id, node.package);
+    });
+    return map;
+  }, [data.nodes]);
+
   const { nodes: initialNodes, edges: initialEdges } = useMemo(
-    () => calculateLayout(data, { expandedPackages, togglePackage }),
-    [data, expandedPackages, togglePackage]
+    () => calculateLayout(data, { expandedPackages, togglePackage, visiblePackages, nodeToPackageMap }),
+    [data, expandedPackages, togglePackage, visiblePackages, nodeToPackageMap]
   );
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
@@ -214,15 +244,16 @@ export function Graph({ data }: GraphProps) {
   const [layoutMode, setLayoutMode] = useState<'flat' | 'auto'>('flat');
   const isMobile = useIsMobile();
 
-  // Update nodes when expanded packages change
   useEffect(() => {
     const { nodes: newNodes, edges: newEdges } = calculateLayout(data, {
       expandedPackages,
       togglePackage,
+      visiblePackages,
+      nodeToPackageMap,
     });
     setNodes(newNodes);
     setEdges(newEdges);
-  }, [expandedPackages, data, togglePackage, setNodes, setEdges]);
+  }, [expandedPackages, visiblePackages, data, togglePackage, nodeToPackageMap, setNodes, setEdges]);
 
   const styledNodes = useMemo(
     () =>
@@ -267,34 +298,31 @@ export function Graph({ data }: GraphProps) {
 
   const handleLayoutToggle = useCallback(() => {
     if (layoutMode === 'flat') {
-      // Apply dagre hierarchical layout
       const layoutedNodes = getLayoutedNodes(nodes, edges, 'TB');
       setNodes(layoutedNodes);
       setLayoutMode('auto');
     } else {
-      // Reset to flat package-based layout
       const { nodes: flatNodes } = calculateLayout(data, {
         expandedPackages,
         togglePackage,
+        visiblePackages,
+        nodeToPackageMap,
       });
       setNodes(flatNodes);
       setLayoutMode('flat');
     }
-  }, [layoutMode, nodes, edges, getLayoutedNodes, setNodes, data, expandedPackages, togglePackage]);
+  }, [layoutMode, nodes, edges, getLayoutedNodes, setNodes, data, expandedPackages, togglePackage, visiblePackages, nodeToPackageMap]);
+
+  const handleFilterPanelToggle = useCallback(() => {
+    setFilterPanelOpen((prev) => !prev);
+  }, []);
+
+  const handleFilterPanelClose = useCallback(() => {
+    setFilterPanelOpen(false);
+  }, []);
 
   const isAllExpanded = expandedCount === totalPackages;
   const isAllCollapsed = expandedCount === 0;
-
-  // Common button styles
-  const buttonBaseStyles = `
-    min-h-[44px] px-3 py-2 sm:min-h-0 sm:px-4 sm:py-1.5
-    bg-bg-secondary border border-neon-cyan/50 text-neon-cyan
-    rounded-md text-xs sm:text-sm font-medium
-    hover:bg-neon-cyan/10 hover:border-neon-cyan
-    hover:shadow-[0_0_10px_rgba(0,255,255,0.3)]
-    active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed
-    touch-manipulation transition-all duration-300
-  `;
 
   return (
     <div className="relative flex-1 w-full h-full overflow-hidden">
@@ -333,27 +361,39 @@ export function Graph({ data }: GraphProps) {
         )}
         <Panel position="top-right" className="m-2 flex flex-col sm:flex-row gap-2">
           <button
-            className={buttonBaseStyles}
+            className={`${BUTTON_BASE_STYLES} ${filterPanelOpen ? 'bg-neon-cyan/20 border-neon-cyan' : ''}`}
+            onClick={handleFilterPanelToggle}
+            title="Filter packages"
+            aria-label="Filter packages"
+          >
+            <span className="sm:hidden">📦</span>
+            <span className="hidden sm:inline">📦 Filter</span>
+          </button>
+          <button
+            className={BUTTON_BASE_STYLES}
             onClick={expandAll}
             disabled={isAllExpanded}
             title="Expand all packages"
+            aria-label="Expand all packages"
           >
             <span className="sm:hidden">📂</span>
             <span className="hidden sm:inline">📂 Expand All</span>
           </button>
           <button
-            className={buttonBaseStyles}
+            className={BUTTON_BASE_STYLES}
             onClick={collapseAll}
             disabled={isAllCollapsed}
             title="Collapse all packages"
+            aria-label="Collapse all packages"
           >
             <span className="sm:hidden">📁</span>
             <span className="hidden sm:inline">📁 Collapse All</span>
           </button>
           <button
-            className={buttonBaseStyles}
+            className={BUTTON_BASE_STYLES}
             onClick={handleLayoutToggle}
             title={layoutMode === 'flat' ? 'Switch to hierarchical layout' : 'Switch to flat layout'}
+            aria-label={layoutMode === 'flat' ? 'Switch to hierarchical layout' : 'Switch to flat layout'}
           >
             <span className="sm:hidden">{layoutMode === 'flat' ? '📊' : '📋'}</span>
             <span className="hidden sm:inline">
@@ -362,6 +402,16 @@ export function Graph({ data }: GraphProps) {
           </button>
         </Panel>
       </ReactFlow>
+      {filterPanelOpen && (
+        <PackageFilterPanel
+          packages={data.packages}
+          visiblePackages={visiblePackages}
+          onToggle={togglePackageVisibility}
+          onShowAll={showAllPackages}
+          onHideAll={hideAllPackages}
+          onClose={handleFilterPanelClose}
+        />
+      )}
       <DetailPanel node={selectedNode} onClose={clearSelection} />
     </div>
   );
