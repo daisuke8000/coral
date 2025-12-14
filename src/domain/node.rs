@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 pub enum NodeType {
     Service,
     Message,
+    Enum,
     External,
 }
 
@@ -50,6 +51,8 @@ pub struct MessageDef {
 }
 
 /// Uses `#[serde(tag = "kind")]` for TypeScript discriminated unions.
+/// Each definition (Service/Message/Enum) becomes its own node.
+/// Service nodes include `messages` for expandable RPC method input/output fields.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind")]
 pub enum NodeDetails {
@@ -57,10 +60,8 @@ pub enum NodeDetails {
         methods: Vec<MethodSignature>,
         messages: Vec<MessageDef>,
     },
-    Message {
-        fields: Vec<FieldInfo>,
-        enums: Vec<EnumInfo>,
-    },
+    Message { fields: Vec<FieldInfo> },
+    Enum { values: Vec<EnumValue> },
     External,
 }
 
@@ -106,6 +107,7 @@ mod tests {
         let cases = [
             (NodeType::Service, "\"service\""),
             (NodeType::Message, "\"message\""),
+            (NodeType::Enum, "\"enum\""),
             (NodeType::External, "\"external\""),
         ];
 
@@ -211,18 +213,26 @@ mod tests {
                 type_name: "string".to_string(),
                 label: "optional".to_string(),
             }],
-            enums: vec![EnumInfo {
-                name: "Status".to_string(),
-                values: vec![EnumValue {
-                    name: "UNKNOWN".to_string(),
-                    number: 0,
-                }],
-            }],
         };
         let json = serde_json::to_string(&message).expect("serialize");
         assert!(json.contains("\"kind\":\"Message\""));
         assert!(json.contains("\"fields\":["));
-        assert!(json.contains("\"enums\":["));
+
+        let enum_details = NodeDetails::Enum {
+            values: vec![
+                EnumValue {
+                    name: "UNKNOWN".to_string(),
+                    number: 0,
+                },
+                EnumValue {
+                    name: "ACTIVE".to_string(),
+                    number: 1,
+                },
+            ],
+        };
+        let json = serde_json::to_string(&enum_details).expect("serialize");
+        assert!(json.contains("\"kind\":\"Enum\""));
+        assert!(json.contains("\"values\":["));
 
         let external = NodeDetails::External;
         let json = serde_json::to_string(&external).expect("serialize");
@@ -233,7 +243,7 @@ mod tests {
     fn test_node_all_types_roundtrip() {
         let nodes = vec![
             Node::new(
-                "user.v1/UserService".to_string(),
+                "user.v1.UserService".to_string(),
                 NodeType::Service,
                 "user.v1".to_string(),
                 "UserService".to_string(),
@@ -244,19 +254,30 @@ mod tests {
                         input_type: "GetUserRequest".to_string(),
                         output_type: "User".to_string(),
                     }],
-                    messages: vec![MessageDef {
-                        name: "GetUserRequest".to_string(),
-                        fields: vec![FieldInfo {
-                            name: "user_id".to_string(),
-                            number: 1,
-                            type_name: "string".to_string(),
-                            label: "optional".to_string(),
-                        }],
-                    }],
+                    messages: vec![
+                        MessageDef {
+                            name: "GetUserRequest".to_string(),
+                            fields: vec![FieldInfo {
+                                name: "user_id".to_string(),
+                                number: 1,
+                                type_name: "string".to_string(),
+                                label: "optional".to_string(),
+                            }],
+                        },
+                        MessageDef {
+                            name: "User".to_string(),
+                            fields: vec![FieldInfo {
+                                name: "id".to_string(),
+                                number: 1,
+                                type_name: "string".to_string(),
+                                label: "optional".to_string(),
+                            }],
+                        },
+                    ],
                 },
             ),
             Node::new(
-                "user.v1/User".to_string(),
+                "user.v1.User".to_string(),
                 NodeType::Message,
                 "user.v1".to_string(),
                 "User".to_string(),
@@ -268,11 +289,29 @@ mod tests {
                         type_name: "string".to_string(),
                         label: "optional".to_string(),
                     }],
-                    enums: vec![],
                 },
             ),
             Node::new(
-                "google.protobuf/Timestamp".to_string(),
+                "user.v1.Status".to_string(),
+                NodeType::Enum,
+                "user.v1".to_string(),
+                "Status".to_string(),
+                "user/v1/user.proto".to_string(),
+                NodeDetails::Enum {
+                    values: vec![
+                        EnumValue {
+                            name: "UNKNOWN".to_string(),
+                            number: 0,
+                        },
+                        EnumValue {
+                            name: "ACTIVE".to_string(),
+                            number: 1,
+                        },
+                    ],
+                },
+            ),
+            Node::new(
+                "google.protobuf.Timestamp".to_string(),
                 NodeType::External,
                 "google.protobuf".to_string(),
                 "Timestamp".to_string(),

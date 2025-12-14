@@ -100,17 +100,15 @@ mod tests {
     use tower::ServiceExt;
 
     use super::*;
-    use crate::domain::{
-        Edge, FieldInfo, MessageDef, MethodSignature, Node, NodeDetails, NodeType, Package,
-    };
+    use crate::domain::{Edge, MethodSignature, Node, NodeDetails, NodeType, Package};
 
     fn test_graph() -> GraphModel {
         GraphModel {
             nodes: vec![Node::new(
-                "user.v1/user".to_string(),
+                "user.v1.UserService".to_string(),
                 NodeType::Service,
                 "user.v1".to_string(),
-                "user".to_string(),
+                "UserService".to_string(),
                 "user/v1/user.proto".to_string(),
                 NodeDetails::Service {
                     methods: vec![MethodSignature {
@@ -118,24 +116,16 @@ mod tests {
                         input_type: "GetUserRequest".to_string(),
                         output_type: "GetUserResponse".to_string(),
                     }],
-                    messages: vec![MessageDef {
-                        name: "GetUserRequest".to_string(),
-                        fields: vec![FieldInfo {
-                            name: "user_id".to_string(),
-                            number: 1,
-                            type_name: "string".to_string(),
-                            label: "optional".to_string(),
-                        }],
-                    }],
+                    messages: vec![],
                 },
             )],
             edges: vec![Edge::new(
-                "user.v1/user".to_string(),
-                "google.protobuf/timestamp".to_string(),
+                "user.v1.UserService".to_string(),
+                "google.protobuf.Timestamp".to_string(),
             )],
             packages: vec![Package::new(
                 "user.v1".to_string(),
-                vec!["user.v1/user".to_string()],
+                vec!["user.v1.UserService".to_string()],
             )],
         }
     }

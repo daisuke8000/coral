@@ -73,15 +73,13 @@ impl Default for GraphModel {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::node::{
-        FieldInfo, MessageDef, MethodSignature, Node, NodeDetails, NodeType,
-    };
+    use crate::domain::node::{FieldInfo, MethodSignature, Node, NodeDetails, NodeType};
 
     #[test]
     fn test_edge_roundtrip() {
         let original = Edge {
-            source: "user.v1/UserService".to_string(),
-            target: "user.v1/User".to_string(),
+            source: "user.v1.UserService".to_string(),
+            target: "user.v1.User".to_string(),
         };
 
         let json = serde_json::to_string(&original).expect("serialize");
@@ -93,7 +91,7 @@ mod tests {
     fn test_package_roundtrip() {
         let original = Package {
             id: "user.v1".to_string(),
-            node_ids: vec!["user.v1/A".to_string(), "user.v1/B".to_string()],
+            node_ids: vec!["user.v1.A".to_string(), "user.v1.B".to_string()],
         };
 
         let json = serde_json::to_string(&original).expect("serialize");
@@ -120,7 +118,7 @@ mod tests {
         let original = GraphModel {
             nodes: vec![
                 Node::new(
-                    "user.v1/UserService".to_string(),
+                    "user.v1.UserService".to_string(),
                     NodeType::Service,
                     "user.v1".to_string(),
                     "UserService".to_string(),
@@ -131,19 +129,11 @@ mod tests {
                             input_type: "GetUserRequest".to_string(),
                             output_type: "User".to_string(),
                         }],
-                        messages: vec![MessageDef {
-                            name: "GetUserRequest".to_string(),
-                            fields: vec![FieldInfo {
-                                name: "user_id".to_string(),
-                                number: 1,
-                                type_name: "string".to_string(),
-                                label: "optional".to_string(),
-                            }],
-                        }],
+                        messages: vec![],
                     },
                 ),
                 Node::new(
-                    "user.v1/User".to_string(),
+                    "user.v1.User".to_string(),
                     NodeType::Message,
                     "user.v1".to_string(),
                     "User".to_string(),
@@ -155,19 +145,18 @@ mod tests {
                             type_name: "string".to_string(),
                             label: "optional".to_string(),
                         }],
-                        enums: vec![],
                     },
                 ),
             ],
             edges: vec![Edge {
-                source: "user.v1/UserService".to_string(),
-                target: "user.v1/User".to_string(),
+                source: "user.v1.UserService".to_string(),
+                target: "user.v1.User".to_string(),
             }],
             packages: vec![Package {
                 id: "user.v1".to_string(),
                 node_ids: vec![
-                    "user.v1/UserService".to_string(),
-                    "user.v1/User".to_string(),
+                    "user.v1.UserService".to_string(),
+                    "user.v1.User".to_string(),
                 ],
             }],
         };
