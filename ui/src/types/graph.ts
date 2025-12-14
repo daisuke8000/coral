@@ -1,4 +1,4 @@
-export type NodeType = 'service' | 'message' | 'external';
+export type NodeType = 'service' | 'message' | 'enum' | 'external';
 
 export interface MethodSignature {
   name: string;
@@ -18,11 +18,13 @@ export interface EnumValue {
   number: number;
 }
 
+/** @deprecated Kept for backward compatibility - enums are now separate nodes */
 export interface EnumInfo {
   name: string;
   values: EnumValue[];
 }
 
+/** Message definition with fields (used in Service details for expandable RPC types) */
 export interface MessageDef {
   name: string;
   fields: FieldInfo[];
@@ -30,7 +32,8 @@ export interface MessageDef {
 
 export type NodeDetails =
   | { kind: 'Service'; methods: MethodSignature[]; messages: MessageDef[] }
-  | { kind: 'Message'; fields: FieldInfo[]; enums: EnumInfo[] }
+  | { kind: 'Message'; fields: FieldInfo[] }
+  | { kind: 'Enum'; values: EnumValue[] }
   | { kind: 'External' };
 
 export interface GraphNode {
