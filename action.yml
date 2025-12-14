@@ -1,0 +1,220 @@
+name: 'Coral Proto Visualizer'
+description: 'Visualize .proto file dependencies from gRPC/Connect projects'
+author: 'coral-team'
+
+branding:
+  icon: 'git-branch'
+  color: 'purple'
+
+inputs:
+  proto-path:
+    description: 'Path to proto files directory'
+    required: false
+    default: 'proto'
+  buf-config:
+    description: 'Path to buf.yaml configuration file (relative to proto-path)'
+    required: false
+    default: ''
+  output-path:
+    description: 'Path to save output files'
+    required: false
+    default: 'coral-output'
+  comment-on-pr:
+    description: 'Post summary as PR comment (true/false)'
+    required: false
+    default: 'false'
+  github-token:
+    description: 'GitHub token for PR comments'
+    required: false
+    default: ${{ github.token }}
+  generate-pages:
+    description: 'Generate static HTML for GitHub Pages (true/false)'
+    required: false
+    default: 'false'
+
+outputs:
+  json-path:
+    description: 'Path to the generated JSON file'
+    value: ${{ steps.generate.outputs.json-path }}
+  html-path:
+    description: 'Path to the generated HTML directory (if generate-pages is true)'
+    value: ${{ steps.generate.outputs.html-path }}
+  summary:
+    description: 'Summary of proto dependencies'
+    value: ${{ steps.generate.outputs.summary }}
+  files-count:
+    description: 'Number of proto files'
+    value: ${{ steps.generate.outputs.files-count }}
+  services-count:
+    description: 'Number of services'
+    value: ${{ steps.generate.outputs.services-count }}
+  messages-count:
+    description: 'Number of messages'
+    value: ${{ steps.generate.outputs.messages-count }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup buf CLI
+      uses: bufbuild/buf-setup-action@v1
+      with:
+        github_token: ${{ inputs.github-token }}
+
+    - name: Setup Rust toolchain
+      uses: dtolnay/rust-action@stable
+      shell: bash
+
+    - name: Cache Coral build
+      uses: actions/cache@v4
+      with:
+        path: |
+          ${{ github.action_path }}/target
+          ~/.cargo/registry
+          ~/.cargo/git
+        key: coral-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          coral-${{ runner.os }}-
+
+    - name: Build Coral
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: cargo build --release
+
+    - name: Generate proto graph
+      id: generate
+      shell: bash
+      run: |
+        # Create output directory
+        mkdir -p "${{ inputs.output-path }}"
+
+        # Navigate to proto directory and build
+        cd "${{ inputs.proto-path }}"
+
+        # Build with buf and pipe to coral
+        if [ -n "${{ inputs.buf-config }}" ]; then
+          buf build --config "${{ inputs.buf-config }}" -o - | \
+            "${{ github.action_path }}/target/release/coral" --output json > \
+            "${{ github.workspace }}/${{ inputs.output-path }}/graph.json"
+        else
+          buf build -o - | \
+            "${{ github.action_path }}/target/release/coral" --output json > \
+            "${{ github.workspace }}/${{ inputs.output-path }}/graph.json"
+        fi
+
+        # Generate summary
+        cd "${{ inputs.proto-path }}"
+        if [ -n "${{ inputs.buf-config }}" ]; then
+          SUMMARY=$(buf build --config "${{ inputs.buf-config }}" -o - | \
+            "${{ github.action_path }}/target/release/coral" --output summary)
+        else
+          SUMMARY=$(buf build -o - | \
+            "${{ github.action_path }}/target/release/coral" --output summary)
+        fi
+
+        # Parse counts from summary
+        FILES_COUNT=$(echo "$SUMMARY" | grep "Files:" | awk '{print $2}')
+        SERVICES_COUNT=$(echo "$SUMMARY" | grep "Services:" | awk '{print $2}')
+        MESSAGES_COUNT=$(echo "$SUMMARY" | grep "Messages:" | awk '{print $2}')
+
+        # Set outputs
+        echo "json-path=${{ inputs.output-path }}/graph.json" >> $GITHUB_OUTPUT
+        echo "files-count=$FILES_COUNT" >> $GITHUB_OUTPUT
+        echo "services-count=$SERVICES_COUNT" >> $GITHUB_OUTPUT
+        echo "messages-count=$MESSAGES_COUNT" >> $GITHUB_OUTPUT
+
+        # Multi-line summary
+        {
+          echo "summary<<EOF"
+          echo "$SUMMARY"
+          echo "EOF"
+        } >> $GITHUB_OUTPUT
+
+    - name: Setup Node.js for UI build
+      if: inputs.generate-pages == 'true'
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Build UI for GitHub Pages
+      if: inputs.generate-pages == 'true'
+      shell: bash
+      working-directory: ${{ github.action_path }}/ui
+      run: |
+        npm ci
+        npm run build:static
+
+    - name: Generate GitHub Pages
+      if: inputs.generate-pages == 'true'
+      shell: bash
+      run: |
+        # Copy built UI to output
+        cp -r "${{ github.action_path }}/ui/dist" "${{ inputs.output-path }}/html"
+
+        # Copy generated JSON to UI directory
+        cp "${{ inputs.output-path }}/graph.json" "${{ inputs.output-path }}/html/"
+
+        echo "html-path=${{ inputs.output-path }}/html" >> $GITHUB_OUTPUT
+
+    - name: Post PR Comment
+      if: inputs.comment-on-pr == 'true' && github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const summary = `${{ steps.generate.outputs.summary }}`;
+          const filesCount = `${{ steps.generate.outputs.files-count }}`;
+          const servicesCount = `${{ steps.generate.outputs.services-count }}`;
+          const messagesCount = `${{ steps.generate.outputs.messages-count }}`;
+
+          const body = `## 🪸 Coral Proto Dependency Analysis
+
+          | Metric | Count |
+          |--------|-------|
+          | Files | ${filesCount} |
+          | Services | ${servicesCount} |
+          | Messages | ${messagesCount} |
+
+          <details>
+          <summary>Full Summary</summary>
+
+          \`\`\`
+          ${summary}
+          \`\`\`
+          </details>
+
+          ---
+          *Generated by [Coral](https://github.com/coral-team/coral)*`;
+
+          // Find existing comment
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+          });
+
+          const existingComment = comments.find(c =>
+            c.user.type === 'Bot' && c.body.includes('Coral Proto Dependency Analysis')
+          );
+
+          if (existingComment) {
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: existingComment.id,
+              body: body.trim()
+            });
+          } else {
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: body.trim()
+            });
+          }
+
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: coral-output
+        path: ${{ inputs.output-path }}
+        retention-days: 30
