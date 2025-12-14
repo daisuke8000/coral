@@ -63,11 +63,10 @@ runs:
     - name: Setup Rust toolchain
       uses: dtolnay/rust-toolchain@stable
 
-    - name: Cache Coral build
+    - name: Cache Cargo
       uses: actions/cache@v4
       with:
         path: |
-          ${{ github.action_path }}/target
           ~/.cargo/registry
           ~/.cargo/git
         key: coral-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
@@ -131,7 +130,7 @@ runs:
       if: inputs.generate-pages == 'true'
       uses: actions/setup-node@v4
       with:
-        node-version: '20'
+        node-version: '22'
 
     - name: Build UI for GitHub Pages
       if: inputs.generate-pages == 'true'
