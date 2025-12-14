@@ -73,7 +73,7 @@ impl Default for GraphModel {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::node::{FieldInfo, MethodSignature, Node, NodeDetails, NodeType};
+    use crate::domain::node::{FieldInfo, MessageDef, MethodSignature, Node, NodeDetails, NodeType};
 
     #[test]
     fn test_edge_roundtrip() {
@@ -128,6 +128,15 @@ mod tests {
                             name: "GetUser".to_string(),
                             input_type: "GetUserRequest".to_string(),
                             output_type: "User".to_string(),
+                        }],
+                        messages: vec![MessageDef {
+                            name: "GetUserRequest".to_string(),
+                            fields: vec![FieldInfo {
+                                name: "user_id".to_string(),
+                                number: 1,
+                                type_name: "string".to_string(),
+                                label: "optional".to_string(),
+                            }],
                         }],
                     },
                 ),

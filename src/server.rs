@@ -100,7 +100,7 @@ mod tests {
     use tower::ServiceExt;
 
     use super::*;
-    use crate::domain::{Edge, MethodSignature, Node, NodeDetails, NodeType, Package};
+    use crate::domain::{Edge, FieldInfo, MessageDef, MethodSignature, Node, NodeDetails, NodeType, Package};
 
     fn test_graph() -> GraphModel {
         GraphModel {
@@ -115,6 +115,15 @@ mod tests {
                         name: "GetUser".to_string(),
                         input_type: "GetUserRequest".to_string(),
                         output_type: "GetUserResponse".to_string(),
+                    }],
+                    messages: vec![MessageDef {
+                        name: "GetUserRequest".to_string(),
+                        fields: vec![FieldInfo {
+                            name: "user_id".to_string(),
+                            number: 1,
+                            type_name: "string".to_string(),
+                            label: "optional".to_string(),
+                        }],
                     }],
                 },
             )],
