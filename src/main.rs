@@ -17,7 +17,7 @@ async fn main() -> Result<()> {
 
     let bytes = coral::read_stdin()?;
 
-    let fds = coral::decoder::decoder(&bytes)?;
+    let fds = coral::decoder::decode(&bytes)?;
 
     if cli.debug {
         coral::debug_output(&fds);

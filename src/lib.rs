@@ -1,6 +1,8 @@
 pub mod decoder;
 pub mod error;
+pub mod domain;
 
+pub use domain::{Edge, GraphModel, Node, NodeDetails, NodeType, Package};
 pub use error::{CoralError, Result};
 
 use prost_types::FileDescriptorSet;
