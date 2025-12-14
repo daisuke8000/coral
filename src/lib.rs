@@ -1,11 +1,13 @@
-pub mod decoder;
-pub mod error;
-pub mod domain;
 pub mod analyzer;
+pub mod decoder;
+pub mod domain;
+pub mod error;
+pub mod server;
 
 pub use analyzer::Analyzer;
 pub use domain::{Edge, GraphModel, Node, NodeDetails, NodeType, Package};
 pub use error::{CoralError, Result};
+pub use server::serve;
 
 use prost_types::FileDescriptorSet;
 use std::io::Read;
