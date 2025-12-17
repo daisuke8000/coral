@@ -32,7 +32,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Analyze and Generate Pages
-        uses: daisuke8000/coral@v0.1.0
+        uses: daisuke8000/coral@latest
         with:
           proto-path: 'proto'
           generate-pages: 'true'
