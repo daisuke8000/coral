@@ -1,15 +1,54 @@
 name-template: 'v$RESOLVED_VERSION'
 tag-template: 'v$RESOLVED_VERSION'
+
+# Autolabeler - PRタイトルやブランチ名から自動でラベルを付与
+autolabeler:
+  - label: 'feature'
+    title:
+      - '/^feat(\(.+\))?:/i'
+  - label: 'fix'
+    title:
+      - '/^fix(\(.+\))?:/i'
+  - label: 'chore'
+    title:
+      - '/^chore(\(.+\))?:/i'
+  - label: 'documentation'
+    title:
+      - '/^docs(\(.+\))?:/i'
+  - label: 'refactor'
+    title:
+      - '/^refactor(\(.+\))?:/i'
+  - label: 'test'
+    title:
+      - '/^test(\(.+\))?:/i'
+  - label: 'ci'
+    title:
+      - '/^ci(\(.+\))?:/i'
+  - label: 'perf'
+    title:
+      - '/^perf(\(.+\))?:/i'
+
 categories:
   - title: '🚀 Features'
     labels: ['feature', 'enhancement']
   - title: '🐛 Bug Fixes'
     labels: ['fix', 'bugfix', 'bug']
+  - title: '⚡ Performance'
+    labels: ['perf', 'performance']
+  - title: '♻️ Refactoring'
+    labels: ['refactor']
+  - title: '🧪 Tests'
+    labels: ['test', 'tests']
   - title: '📚 Documentation'
     labels: ['documentation', 'docs']
+  - title: '🔧 CI/CD'
+    labels: ['ci', 'cd']
   - title: '🧰 Maintenance'
-    labels: ['chore', 'maintenance']
+    labels: ['chore', 'maintenance', 'dependencies']
+  - title: '📦 Other Changes'
+    labels: ['*']
 change-template: '- $TITLE @$AUTHOR (#$NUMBER)'
+no-changes-template: 'No changes since last release.'
 version-resolver:
   major:
     labels: ['major']
