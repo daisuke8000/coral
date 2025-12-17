@@ -1,0 +1,96 @@
+syntax = "proto3";
+
+package shipping.v1;
+
+import "google/protobuf/timestamp.proto";
+import "order/v1/order.proto";
+import "user/v1/user.proto";
+import "common/v1/address.proto";
+
+// ShippingService handles shipment creation, tracking, and delivery management
+service ShippingService {
+  // Create a new shipment for an order
+  rpc CreateShipment(CreateShipmentRequest) returns (CreateShipmentResponse);
+  // Get shipment details by ID
+  rpc GetShipment(GetShipmentRequest) returns (GetShipmentResponse);
+  // Track shipment status and location history
+  rpc TrackShipment(TrackShipmentRequest) returns (TrackShipmentResponse);
+}
+
+// Status of a shipment
+enum ShipmentStatus {
+  SHIPMENT_STATUS_UNSPECIFIED = 0;
+  SHIPMENT_STATUS_PENDING = 1;
+  SHIPMENT_STATUS_PICKED_UP = 2;
+  SHIPMENT_STATUS_IN_TRANSIT = 3;
+  SHIPMENT_STATUS_OUT_FOR_DELIVERY = 4;
+  SHIPMENT_STATUS_DELIVERED = 5;
+  SHIPMENT_STATUS_RETURNED = 6;
+  SHIPMENT_STATUS_FAILED = 7;
+}
+
+// Carrier information
+enum Carrier {
+  CARRIER_UNSPECIFIED = 0;
+  CARRIER_YAMATO = 1;
+  CARRIER_SAGAWA = 2;
+  CARRIER_JAPAN_POST = 3;
+  CARRIER_FEDEX = 4;
+  CARRIER_DHL = 5;
+}
+
+// Shipment represents a delivery shipment
+message Shipment {
+  string id = 1;
+  order.v1.Order order = 2;
+  user.v1.GetUserResponse recipient = 3;
+  common.v1.Address shipping_address = 4;
+  ShipmentStatus status = 5;
+  Carrier carrier = 6;
+  string tracking_number = 7;
+  google.protobuf.Timestamp estimated_delivery = 8;
+  google.protobuf.Timestamp actual_delivery = 9;
+  google.protobuf.Timestamp created_at = 10;
+  google.protobuf.Timestamp updated_at = 11;
+}
+
+// Tracking event for shipment history
+message TrackingEvent {
+  ShipmentStatus status = 1;
+  string location = 2;
+  string description = 3;
+  google.protobuf.Timestamp occurred_at = 4;
+}
+
+// Request to create a new shipment
+message CreateShipmentRequest {
+  string order_id = 1;
+  Carrier carrier = 2;
+  common.v1.Address shipping_address = 3;
+}
+
+// Response containing the created shipment
+message CreateShipmentResponse {
+  Shipment shipment = 1;
+}
+
+// Request to get shipment by ID
+message GetShipmentRequest {
+  string shipment_id = 1;
+}
+
+// Response containing shipment details
+message GetShipmentResponse {
+  Shipment shipment = 1;
+}
+
+// Request to track a shipment
+message TrackShipmentRequest {
+  string shipment_id = 1;
+}
+
+// Response containing tracking history
+message TrackShipmentResponse {
+  Shipment shipment = 1;
+  repeated TrackingEvent events = 2;
+}
