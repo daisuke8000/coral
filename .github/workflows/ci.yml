@@ -108,32 +108,28 @@ jobs:
         uses: ./
         with:
           proto-path: 'sandbox'
-          output-path: 'test-output'
 
       - name: Verify JSON output
         run: |
-          echo "=== Outputs ==="
-          echo "Files: ${{ steps.json-test.outputs.files-count }}"
-          echo "Services: ${{ steps.json-test.outputs.services-count }}"
-          echo "Messages: ${{ steps.json-test.outputs.messages-count }}"
+          echo "=== JSON path ==="
+          echo "coral-output/graph.json"
           echo ""
           echo "=== JSON (first 30 lines) ==="
-          head -30 test-output/graph.json
+          head -30 coral-output/graph.json
 
       - name: Test Action (with Pages)
         id: pages-test
         uses: ./
         with:
           proto-path: 'sandbox'
-          output-path: 'test-pages-output'
           generate-pages: 'true'
 
       - name: Verify Pages output
         run: |
           echo "=== Pages files ==="
-          ls -la test-pages-output/html/
-          test -f test-pages-output/html/index.html && echo "✅ index.html exists"
-          test -f test-pages-output/html/graph.json && echo "✅ graph.json exists"
+          ls -la coral-output/html/
+          test -f coral-output/html/index.html && echo "✅ index.html exists"
+          test -f coral-output/html/graph.json && echo "✅ graph.json exists"
 
       - name: Setup Pages
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -143,7 +139,7 @@ jobs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-pages-artifact@v4
         with:
-          path: test-pages-output/html
+          path: coral-output/html
 
   deploy-pages:
     name: Deploy to GitHub Pages

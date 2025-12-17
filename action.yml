@@ -15,12 +15,8 @@ inputs:
     description: 'Path to buf.yaml configuration file (relative to proto-path)'
     required: false
     default: ''
-  output-path:
-    description: 'Path to save output files'
-    required: false
-    default: 'coral-output'
   comment-on-pr:
-    description: 'Post summary as PR comment (true/false)'
+    description: 'Post analysis and diff as PR comment (true/false)'
     required: false
     default: 'false'
   github-token:
@@ -38,19 +34,13 @@ outputs:
     value: ${{ steps.generate.outputs.json-path }}
   html-path:
     description: 'Path to the generated HTML directory (if generate-pages is true)'
-    value: ${{ steps.generate.outputs.html-path }}
-  summary:
-    description: 'Summary of proto dependencies'
-    value: ${{ steps.generate.outputs.summary }}
-  files-count:
-    description: 'Number of proto files'
-    value: ${{ steps.generate.outputs.files-count }}
-  services-count:
-    description: 'Number of services'
-    value: ${{ steps.generate.outputs.services-count }}
-  messages-count:
-    description: 'Number of messages'
-    value: ${{ steps.generate.outputs.messages-count }}
+    value: ${{ steps.pages.outputs.html-path }}
+  markdown-report:
+    description: 'Detailed markdown report of proto dependencies'
+    value: ${{ steps.generate.outputs.markdown-report }}
+  diff-report:
+    description: 'Diff report showing changes from base branch'
+    value: ${{ steps.diff.outputs.diff-report }}
 
 runs:
   using: 'composite'
@@ -82,47 +72,56 @@ runs:
       id: generate
       shell: bash
       run: |
-        # Create output directory
-        mkdir -p "${{ inputs.output-path }}"
-
-        # Navigate to proto directory and build
+        mkdir -p "coral-output"
         cd "${{ inputs.proto-path }}"
 
-        # Build with buf and pipe to coral
         if [ -n "${{ inputs.buf-config }}" ]; then
-          buf build --config "${{ inputs.buf-config }}" -o - | \
-            "${{ github.action_path }}/target/release/coral" --output json > \
-            "${{ github.workspace }}/${{ inputs.output-path }}/graph.json"
+          BUF_CMD="buf build --config ${{ inputs.buf-config }} -o -"
         else
-          buf build -o - | \
-            "${{ github.action_path }}/target/release/coral" --output json > \
-            "${{ github.workspace }}/${{ inputs.output-path }}/graph.json"
+          BUF_CMD="buf build -o -"
         fi
 
-        # Generate summary (already in proto-path)
-        if [ -n "${{ inputs.buf-config }}" ]; then
-          SUMMARY=$(buf build --config "${{ inputs.buf-config }}" -o - | \
-            "${{ github.action_path }}/target/release/coral" --output summary)
-        else
-          SUMMARY=$(buf build -o - | \
-            "${{ github.action_path }}/target/release/coral" --output summary)
-        fi
+        eval "$BUF_CMD" | "${{ github.action_path }}/target/release/coral" --output json > \
+          "${{ github.workspace }}/coral-output/graph.json"
 
-        # Parse counts from summary
-        FILES_COUNT=$(echo "$SUMMARY" | grep "Files:" | awk '{print $2}')
-        SERVICES_COUNT=$(echo "$SUMMARY" | grep "Services:" | awk '{print $2}')
-        MESSAGES_COUNT=$(echo "$SUMMARY" | grep "Messages:" | awk '{print $2}')
+        MARKDOWN=$(eval "$BUF_CMD" | "${{ github.action_path }}/target/release/coral" --output markdown)
 
-        # Set outputs
-        echo "json-path=${{ inputs.output-path }}/graph.json" >> $GITHUB_OUTPUT
-        echo "files-count=$FILES_COUNT" >> $GITHUB_OUTPUT
-        echo "services-count=$SERVICES_COUNT" >> $GITHUB_OUTPUT
-        echo "messages-count=$MESSAGES_COUNT" >> $GITHUB_OUTPUT
-
-        # Multi-line summary
+        echo "json-path=coral-output/graph.json" >> $GITHUB_OUTPUT
         {
-          echo "summary<<EOF"
-          echo "$SUMMARY"
+          echo "markdown-report<<EOF"
+          echo "$MARKDOWN"
+          echo "EOF"
+        } >> $GITHUB_OUTPUT
+
+    - name: Generate base branch data for diff
+      if: inputs.comment-on-pr == 'true' && github.event_name == 'pull_request'
+      id: diff
+      shell: bash
+      run: |
+        HEAD_SHA=$(git rev-parse HEAD)
+
+        git fetch origin "${{ github.base_ref }}" --depth=1
+        git checkout "origin/${{ github.base_ref }}"
+
+        cd "${{ inputs.proto-path }}"
+        if [ -n "${{ inputs.buf-config }}" ]; then
+          BUF_CMD="buf build --config ${{ inputs.buf-config }} -o -"
+        else
+          BUF_CMD="buf build -o -"
+        fi
+
+        eval "$BUF_CMD" | "${{ github.action_path }}/target/release/coral" --output json > \
+          "${{ github.workspace }}/coral-output/base.json"
+
+        git checkout "$HEAD_SHA"
+
+        DIFF_REPORT=$("${{ github.action_path }}/target/release/coral" diff \
+          "${{ github.workspace }}/coral-output/base.json" \
+          "${{ github.workspace }}/coral-output/graph.json")
+
+        {
+          echo "diff-report<<EOF"
+          echo "$DIFF_REPORT"
           echo "EOF"
         } >> $GITHUB_OUTPUT
 
@@ -142,52 +141,33 @@ runs:
 
     - name: Generate GitHub Pages
       if: inputs.generate-pages == 'true'
+      id: pages
       shell: bash
       run: |
-        # Copy built UI to output
-        cp -r "${{ github.action_path }}/ui/dist" "${{ inputs.output-path }}/html"
-
-        # Copy generated JSON to UI directory
-        cp "${{ inputs.output-path }}/graph.json" "${{ inputs.output-path }}/html/"
-
-        echo "html-path=${{ inputs.output-path }}/html" >> $GITHUB_OUTPUT
+        cp -r "${{ github.action_path }}/ui/dist" "coral-output/html"
+        cp "coral-output/graph.json" "coral-output/html/"
+        echo "html-path=coral-output/html" >> $GITHUB_OUTPUT
 
     - name: Post PR Comment
       if: inputs.comment-on-pr == 'true' && github.event_name == 'pull_request'
       uses: actions/github-script@v7
       env:
-        SUMMARY: ${{ steps.generate.outputs.summary }}
-        FILES_COUNT: ${{ steps.generate.outputs.files-count }}
-        SERVICES_COUNT: ${{ steps.generate.outputs.services-count }}
-        MESSAGES_COUNT: ${{ steps.generate.outputs.messages-count }}
+        MARKDOWN_REPORT: ${{ steps.generate.outputs.markdown-report }}
+        DIFF_REPORT: ${{ steps.diff.outputs.diff-report }}
       with:
         github-token: ${{ inputs.github-token }}
         script: |
-          const summary = process.env.SUMMARY;
-          const filesCount = process.env.FILES_COUNT;
-          const servicesCount = process.env.SERVICES_COUNT;
-          const messagesCount = process.env.MESSAGES_COUNT;
+          const markdownReport = process.env.MARKDOWN_REPORT || '';
+          const diffReport = process.env.DIFF_REPORT || '';
 
-          const body = `## 🪸 Coral Proto Dependency Analysis
+          let body = '';
 
-          | Metric | Count |
-          |--------|-------|
-          | Files | ${filesCount} |
-          | Services | ${servicesCount} |
-          | Messages | ${messagesCount} |
+          if (diffReport.trim()) {
+            body += diffReport + '\n\n';
+          }
 
-          <details>
-          <summary>Full Summary</summary>
+          body += markdownReport;
 
-          \`\`\`
-          ${summary}
-          \`\`\`
-          </details>
-
-          ---
-          *Generated by [Coral](https://github.com/daisuke8000/coral)*`;
-
-          // Find existing comment
           const { data: comments } = await github.rest.issues.listComments({
             owner: context.repo.owner,
             repo: context.repo.repo,
@@ -217,6 +197,7 @@ runs:
     - name: Upload Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: coral-${{ inputs.output-path }}
-        path: ${{ inputs.output-path }}
-        retention-days: 30
+        name: coral-${{ github.run_id }}
+        path: coral-output
+        retention-days: 1
+        overwrite: true
