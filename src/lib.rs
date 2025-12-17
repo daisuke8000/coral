@@ -2,12 +2,16 @@
 
 pub mod analyzer;
 pub mod decoder;
+pub mod diff;
 pub mod domain;
 pub mod error;
+pub mod reporter;
 pub mod server;
 
 pub use analyzer::Analyzer;
+pub use diff::DiffReport;
 pub use domain::{Edge, GraphModel, Node, NodeDetails, NodeType, Package};
+pub use reporter::MarkdownReporter;
 pub use error::{CoralError, Result};
 pub use server::serve;
 
