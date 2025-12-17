@@ -5,8 +5,8 @@ edition = "2024"
 
 [dependencies]
 # Protobuf
-prost = "0.13"
-prost-types = "0.13"
+prost = "0.14"
+prost-types = "0.14"
 bytes = "1.7"
 
 # CLI
@@ -14,14 +14,14 @@ clap = { version = "4.5", features = ["derive"] }
 
 # Error handling
 anyhow = "1.0"
-thiserror = "1.0"
+thiserror = "2.0"
 
 # Async runtime
 tokio = { version = "1.0", features = ["full"] }
 
 # Web server (Phase 5 で使用)
-axum = "0.7"
-tower-http = { version = "0.5", features = ["cors", "fs"] }
+axum = "0.8"
+tower-http = { version = "0.6", features = ["cors", "fs"] }
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
