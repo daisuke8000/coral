@@ -207,8 +207,8 @@ impl MarkdownReporter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::node::{EnumValue, FieldInfo, MethodSignature, NodeDetails};
     use crate::domain::Edge;
+    use crate::domain::node::{EnumValue, FieldInfo, MethodSignature, NodeDetails};
 
     fn create_test_model() -> GraphModel {
         GraphModel {

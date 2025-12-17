@@ -80,16 +80,11 @@ impl DiffReport {
         let head_ids: HashSet<&str> = head_nodes.keys().copied().collect();
 
         // Added: in HEAD but not in BASE
-        let added = Self::collect_diff_items(
-            head_ids.difference(&base_ids).copied(),
-            &head_nodes,
-        );
+        let added = Self::collect_diff_items(head_ids.difference(&base_ids).copied(), &head_nodes);
 
         // Removed: in BASE but not in HEAD
-        let removed = Self::collect_diff_items(
-            base_ids.difference(&head_ids).copied(),
-            &base_nodes,
-        );
+        let removed =
+            Self::collect_diff_items(base_ids.difference(&head_ids).copied(), &base_nodes);
 
         // Modified: in both, check for changes
         let mut modified: Vec<ModifiedItem> = base_ids
@@ -128,10 +123,7 @@ impl DiffReport {
 
         // Added section
         if !self.added.is_empty() {
-            output.push_str(&format!(
-                "#### ✅ Added (+{})\n",
-                self.added.total_count()
-            ));
+            output.push_str(&format!("#### ✅ Added (+{})\n", self.added.total_count()));
             output.push_str("| Type | Name | Package |\n");
             output.push_str("|------|------|--------|\n");
 
@@ -296,10 +288,7 @@ impl DiffReport {
         changes
     }
 
-    fn compute_field_changes(
-        base_fields: &[FieldInfo],
-        head_fields: &[FieldInfo],
-    ) -> Vec<Change> {
+    fn compute_field_changes(base_fields: &[FieldInfo], head_fields: &[FieldInfo]) -> Vec<Change> {
         let mut changes = vec![];
 
         let base_set: HashSet<&str> = base_fields.iter().map(|f| f.name.as_str()).collect();
@@ -326,10 +315,7 @@ impl DiffReport {
         changes
     }
 
-    fn compute_enum_changes(
-        base_values: &[EnumValue],
-        head_values: &[EnumValue],
-    ) -> Vec<Change> {
+    fn compute_enum_changes(base_values: &[EnumValue], head_values: &[EnumValue]) -> Vec<Change> {
         let mut changes = vec![];
 
         let base_set: HashSet<&str> = base_values.iter().map(|v| v.name.as_str()).collect();
@@ -567,20 +553,23 @@ mod tests {
             .iter()
             .find(|m| m.label == "UserService")
             .expect("UserService should be modified");
-        assert!(service_mod
-            .changes
-            .iter()
-            .any(|c| matches!(c, Change::MethodAdded { method } if method.name == "CreateUser")));
+        assert!(
+            service_mod.changes.iter().any(
+                |c| matches!(c, Change::MethodAdded { method } if method.name == "CreateUser")
+            )
+        );
 
         let user_mod = diff
             .modified
             .iter()
             .find(|m| m.label == "User")
             .expect("User should be modified");
-        assert!(user_mod
-            .changes
-            .iter()
-            .any(|c| matches!(c, Change::FieldAdded { field } if field.name == "email")));
+        assert!(
+            user_mod
+                .changes
+                .iter()
+                .any(|c| matches!(c, Change::FieldAdded { field } if field.name == "email"))
+        );
     }
 
     #[test]
