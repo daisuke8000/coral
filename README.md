@@ -71,9 +71,8 @@ jobs:
 | Input | Description | Default |
 |-------|-------------|---------|
 | `proto-path` | Path to proto files directory | `proto` |
-| `buf-config` | Path to buf.yaml configuration | `''` |
-| `output-path` | Path to save output files | `coral-output` |
-| `comment-on-pr` | Post summary as PR comment | `false` |
+| `buf-config` | Path to buf.yaml configuration file (relative to proto-path) | `''` |
+| `comment-on-pr` | Post analysis and diff as PR comment | `false` |
 | `github-token` | GitHub token for PR comments | `${{ github.token }}` |
 | `generate-pages` | Generate static HTML for GitHub Pages | `false` |
 
@@ -82,11 +81,9 @@ jobs:
 | Output | Description |
 |--------|-------------|
 | `json-path` | Path to the generated JSON file |
-| `html-path` | Path to the generated HTML directory |
-| `summary` | Summary of proto dependencies |
-| `files-count` | Number of proto files |
-| `services-count` | Number of services |
-| `messages-count` | Number of messages |
+| `html-path` | Path to the generated HTML directory (if generate-pages is true) |
+| `markdown-report` | Detailed markdown report of proto dependencies |
+| `diff-report` | Diff report showing changes from base branch |
 
 ## Deploy to GitHub Pages
 
