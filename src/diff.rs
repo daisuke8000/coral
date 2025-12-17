@@ -69,24 +69,18 @@ impl DiffReport {
     /// Compute differences between base and head GraphModels.
     #[must_use]
     pub fn compute(base: &GraphModel, head: &GraphModel) -> Self {
-        // Build lookup maps by node ID
         let base_nodes: HashMap<&str, &Node> =
             base.nodes.iter().map(|n| (n.id.as_str(), n)).collect();
         let head_nodes: HashMap<&str, &Node> =
             head.nodes.iter().map(|n| (n.id.as_str(), n)).collect();
 
-        // Compute set differences
         let base_ids: HashSet<&str> = base_nodes.keys().copied().collect();
         let head_ids: HashSet<&str> = head_nodes.keys().copied().collect();
 
-        // Added: in HEAD but not in BASE
         let added = Self::collect_diff_items(head_ids.difference(&base_ids).copied(), &head_nodes);
-
-        // Removed: in BASE but not in HEAD
         let removed =
             Self::collect_diff_items(base_ids.difference(&head_ids).copied(), &base_nodes);
 
-        // Modified: in both, check for changes
         let mut modified: Vec<ModifiedItem> = base_ids
             .intersection(&head_ids)
             .filter_map(|id| {
@@ -96,7 +90,6 @@ impl DiffReport {
             })
             .collect();
 
-        // Sort for deterministic output
         modified.sort_by(|a, b| a.node_id.cmp(&b.node_id));
 
         Self {
@@ -121,7 +114,6 @@ impl DiffReport {
 
         let mut output = String::from("### Changes from Base\n\n");
 
-        // Added section
         if !self.added.is_empty() {
             output.push_str(&format!("#### ✅ Added (+{})\n", self.added.total_count()));
             output.push_str("| Type | Name | Package |\n");
@@ -139,7 +131,6 @@ impl DiffReport {
             output.push('\n');
         }
 
-        // Modified section
         if !self.modified.is_empty() {
             output.push_str(&format!("#### ⚠️ Modified ({})\n", self.modified.len()));
             output.push_str("| Type | Name | Changes |\n");
@@ -161,7 +152,6 @@ impl DiffReport {
             output.push('\n');
         }
 
-        // Removed section
         if !self.removed.is_empty() {
             output.push_str(&format!(
                 "#### ❌ Removed (-{})\n",
@@ -203,7 +193,6 @@ impl DiffReport {
             }
         }
 
-        // Sort for deterministic output (HashSet iteration order is non-deterministic)
         items.services.sort_by(|a, b| a.id.cmp(&b.id));
         items.messages.sort_by(|a, b| a.id.cmp(&b.id));
         items.enums.sort_by(|a, b| a.id.cmp(&b.id));
@@ -267,7 +256,6 @@ impl DiffReport {
         let base_set: HashSet<&str> = base_methods.iter().map(|m| m.name.as_str()).collect();
         let head_set: HashSet<&str> = head_methods.iter().map(|m| m.name.as_str()).collect();
 
-        // Added methods
         for name in head_set.difference(&base_set) {
             if let Some(method) = head_methods.iter().find(|m| m.name == *name) {
                 changes.push(Change::MethodAdded {
@@ -276,7 +264,6 @@ impl DiffReport {
             }
         }
 
-        // Removed methods
         for name in base_set.difference(&head_set) {
             if let Some(method) = base_methods.iter().find(|m| m.name == *name) {
                 changes.push(Change::MethodRemoved {
@@ -294,7 +281,6 @@ impl DiffReport {
         let base_set: HashSet<&str> = base_fields.iter().map(|f| f.name.as_str()).collect();
         let head_set: HashSet<&str> = head_fields.iter().map(|f| f.name.as_str()).collect();
 
-        // Added fields
         for name in head_set.difference(&base_set) {
             if let Some(field) = head_fields.iter().find(|f| f.name == *name) {
                 changes.push(Change::FieldAdded {
@@ -303,7 +289,6 @@ impl DiffReport {
             }
         }
 
-        // Removed fields
         for name in base_set.difference(&head_set) {
             if let Some(field) = base_fields.iter().find(|f| f.name == *name) {
                 changes.push(Change::FieldRemoved {
@@ -321,7 +306,6 @@ impl DiffReport {
         let base_set: HashSet<&str> = base_values.iter().map(|v| v.name.as_str()).collect();
         let head_set: HashSet<&str> = head_values.iter().map(|v| v.name.as_str()).collect();
 
-        // Added values
         for name in head_set.difference(&base_set) {
             if let Some(value) = head_values.iter().find(|v| v.name == *name) {
                 changes.push(Change::EnumValueAdded {
@@ -330,7 +314,6 @@ impl DiffReport {
             }
         }
 
-        // Removed values
         for name in base_set.difference(&head_set) {
             if let Some(value) = base_values.iter().find(|v| v.name == *name) {
                 changes.push(Change::EnumValueRemoved {
