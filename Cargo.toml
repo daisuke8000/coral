@@ -22,7 +22,7 @@ thiserror = "2.0"
 # Async runtime
 tokio = { version = "1.0", features = ["full"] }
 
-# Web server (Phase 5 で使用)
+# Web server
 axum = "0.8"
 tower-http = { version = "0.6", features = ["cors", "fs"] }
 
