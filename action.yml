@@ -162,11 +162,8 @@ runs:
 
           let body = '';
 
-          if (diffReport.trim()) {
-            body += diffReport + '\n\n';
-          }
-
-          body += markdownReport;
+          // PR時はdiff分のみを表示
+          body = '## 🪸 Coral Proto Dependency Analysis\n\n' + (diffReport.trim() || '### No Changes Detected\n\nNo proto schema changes in this PR.');
 
           const { data: comments } = await github.rest.issues.listComments({
             owner: context.repo.owner,
