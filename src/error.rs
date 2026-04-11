@@ -31,6 +31,7 @@ pub type Result<T> = std::result::Result<T, CoralError>;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use prost::Message;
     use std::error::Error;
 
     #[test]
@@ -44,14 +45,15 @@ mod tests {
 
     #[test]
     fn test_invalid_protobuf_error_message() {
-        let err = CoralError::InvalidProtobuf {
-            source: prost::DecodeError::new("invalid protobuf binary"),
-        };
+        let source = prost_types::FileDescriptorSet::decode(&[0x80][..])
+            .expect_err("invalid protobuf should fail to decode");
+        let source_message = source.to_string();
+        let err = CoralError::InvalidProtobuf { source };
         assert!(
             err.to_string()
                 .starts_with("Invalid protobuf binary format:")
         );
-        assert!(err.to_string().contains("invalid protobuf binary"));
+        assert!(err.to_string().contains(&source_message));
     }
 
     #[test]
