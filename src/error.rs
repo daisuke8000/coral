@@ -48,9 +48,7 @@ mod tests {
         let source = prost_types::FileDescriptorSet::decode(&[0x80][..])
             .expect_err("invalid protobuf should fail to decode");
         let source_message = source.to_string();
-        let err = CoralError::InvalidProtobuf {
-            source,
-        };
+        let err = CoralError::InvalidProtobuf { source };
         assert!(
             err.to_string()
                 .starts_with("Invalid protobuf binary format:")
