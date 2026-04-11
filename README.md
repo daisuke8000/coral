@@ -63,10 +63,10 @@ jobs:
       pull-requests: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Analyze Proto Dependencies
-        uses: daisuke8000/coral@v0.2.2
+        uses: daisuke8000/coral@075547e635b80ba6ac5a2396d3bbfa369b9c1e1a # v0.2.2
         with:
           proto-path: 'proto'
           comment-on-pr: 'true'
@@ -118,16 +118,16 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Generate Pages
-        uses: daisuke8000/coral@v0.2.2
+        uses: daisuke8000/coral@075547e635b80ba6ac5a2396d3bbfa369b9c1e1a # v0.2.2
         with:
           proto-path: 'proto'
           generate-pages: 'true'
 
-      - uses: actions/configure-pages@v4
-      - uses: actions/upload-pages-artifact@v4
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+      - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4.0.0
         with:
           path: 'coral-output/html'
 
@@ -138,7 +138,7 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/deploy-pages@v4
+      - uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
         id: deployment
 ```
 

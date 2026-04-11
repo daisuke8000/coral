@@ -20,7 +20,7 @@ inputs:
     required: false
     default: 'false'
   github-token:
-    description: 'GitHub token for PR comments and API access. Required permission: pull-requests: write. Falls back to github.token if omitted.'
+    description: 'GitHub token for PR comments only. Required permission: pull-requests: write. Falls back to github.token if omitted.'
     required: false
     default: ''
   generate-pages:
@@ -69,16 +69,27 @@ runs:
           echo "::error::version must be a valid semver tag (e.g. v1.2.3)"
           exit 1
         fi
-        RESOLVED_PATH="$(realpath "${WORKSPACE}/${INPUT_PROTO_PATH}" 2>/dev/null || echo "")"
-        if [[ -z "$RESOLVED_PATH" || "$RESOLVED_PATH" != "${WORKSPACE}"* ]]; then
+        RESOLVED_PROTO_PATH="$(realpath "${WORKSPACE}/${INPUT_PROTO_PATH}" 2>/dev/null || echo "")"
+        if [[ -z "$RESOLVED_PROTO_PATH" || ( "$RESOLVED_PROTO_PATH" != "${WORKSPACE}" && "$RESOLVED_PROTO_PATH" != "${WORKSPACE}/"* ) ]]; then
           echo "::error::proto-path must be within the workspace directory"
           exit 1
+        fi
+        if [[ -n "$INPUT_BUF_CONFIG" ]]; then
+          if [[ "$INPUT_BUF_CONFIG" == /* ]]; then
+            echo "::error::buf-config must be a relative path within proto-path"
+            exit 1
+          fi
+          RESOLVED_BUF_CONFIG="$(realpath "${RESOLVED_PROTO_PATH}/${INPUT_BUF_CONFIG}" 2>/dev/null || echo "")"
+          if [[ -z "$RESOLVED_BUF_CONFIG" || ( "$RESOLVED_BUF_CONFIG" != "${RESOLVED_PROTO_PATH}" && "$RESOLVED_BUF_CONFIG" != "${RESOLVED_PROTO_PATH}/"* ) ]]; then
+            echo "::error::buf-config must resolve within proto-path"
+            exit 1
+          fi
         fi
 
     - name: Setup buf CLI
       uses: bufbuild/buf-setup-action@a47c93e0b1648d5651a065437926377d060baa99  # v1.50.0
       with:
-        github_token: ${{ inputs.github-token || github.token }}
+        github_token: ${{ github.token }}
 
     - name: Download Coral binary
       id: download-coral
