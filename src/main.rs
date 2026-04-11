@@ -3,6 +3,8 @@ use std::path::PathBuf;
 use anyhow::Result;
 use clap::{Parser, Subcommand, ValueEnum};
 
+const MAX_DIFF_JSON_BYTES: u64 = 32 * 1024 * 1024; // 32 MiB
+
 #[derive(Parser, Debug)]
 #[command(
     name = "coral",
@@ -42,6 +44,19 @@ enum OutputMode {
     Markdown,
 }
 
+fn read_diff_json(path: &PathBuf) -> Result<String> {
+    let metadata = std::fs::metadata(path)?;
+    if metadata.len() > MAX_DIFF_JSON_BYTES {
+        anyhow::bail!(
+            "diff input exceeds {} bytes: {}",
+            MAX_DIFF_JSON_BYTES,
+            path.display()
+        );
+    }
+
+    Ok(std::fs::read_to_string(path)?)
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     env_logger::init();
@@ -61,8 +76,8 @@ async fn main() -> Result<()> {
                     anyhow::bail!("diff only accepts .json files, got: {}", path.display());
                 }
             }
-            let base_json = std::fs::read_to_string(&base)?;
-            let head_json = std::fs::read_to_string(&head)?;
+            let base_json = read_diff_json(&base)?;
+            let head_json = read_diff_json(&head)?;
 
             let base_model: coral::GraphModel = serde_json::from_str(&base_json)?;
             let head_model: coral::GraphModel = serde_json::from_str(&head_json)?;

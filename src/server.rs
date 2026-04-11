@@ -1,12 +1,13 @@
 use std::path::PathBuf;
 
+use axum::Router;
 use axum::extract::State;
 use axum::http::header::CONTENT_TYPE;
 use axum::http::{Method, StatusCode};
 use axum::response::IntoResponse;
 use axum::routing::get;
-use axum::{Json, Router};
-use log::{debug, info};
+use log::{debug, info, warn};
+use prost::bytes::Bytes;
 use tower_http::cors::CorsLayer;
 use tower_http::services::ServeDir;
 
@@ -14,7 +15,7 @@ use crate::domain::GraphModel;
 
 #[derive(Clone)]
 pub struct AppState {
-    pub graph: GraphModel,
+    pub graph_json: Bytes,
 }
 
 async fn health() -> impl IntoResponse {
@@ -22,7 +23,10 @@ async fn health() -> impl IntoResponse {
 }
 
 async fn get_graph(State(state): State<AppState>) -> impl IntoResponse {
-    Json(state.graph.clone())
+    (
+        [(CONTENT_TYPE, "application/json")],
+        state.graph_json.clone(),
+    )
 }
 
 fn create_cors_layer() -> CorsLayer {
@@ -42,7 +46,11 @@ pub fn create_router(graph: GraphModel) -> Router {
 }
 
 pub fn create_router_with_static(graph: GraphModel, static_dir: Option<PathBuf>) -> Router {
-    let state = AppState { graph };
+    let state = AppState {
+        graph_json: Bytes::from(
+            serde_json::to_vec(&graph).expect("graph model should always serialize"),
+        ),
+    };
 
     let api_routes = Router::new()
         .route("/health", get(health))
@@ -88,6 +96,7 @@ pub async fn serve_with_static(
             ),
         }
     }
+    warn!("   Local API access is unauthenticated; avoid using Coral on shared machines");
     eprintln!("   Press Ctrl+C to stop");
 
     let listener = tokio::net::TcpListener::bind(&addr).await?;
