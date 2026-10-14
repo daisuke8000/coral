@@ -50,6 +50,7 @@ runs:
   using: 'composite'
   steps:
     - name: Validate inputs
+      id: validate
       shell: bash
       env:
         INPUT_PROTO_PATH: ${{ inputs.proto-path }}
@@ -69,22 +70,30 @@ runs:
           echo "::error::version must be a valid semver tag (e.g. v1.2.3)"
           exit 1
         fi
-        RESOLVED_PROTO_PATH="$(realpath "${WORKSPACE}/${INPUT_PROTO_PATH}" 2>/dev/null || echo "")"
-        if [[ -z "$RESOLVED_PROTO_PATH" || ( "$RESOLVED_PROTO_PATH" != "${WORKSPACE}" && "$RESOLVED_PROTO_PATH" != "${WORKSPACE}/"* ) ]]; then
+        WORKSPACE="$(realpath -e "$WORKSPACE")"
+        if [[ "$INPUT_PROTO_PATH" == /* ]]; then
+          RESOLVED_PROTO_PATH="$(realpath -e "$INPUT_PROTO_PATH" 2>/dev/null || echo "")"
+        else
+          RESOLVED_PROTO_PATH="$(realpath -e "${WORKSPACE}/${INPUT_PROTO_PATH}" 2>/dev/null || echo "")"
+        fi
+        if [[ ! -d "$RESOLVED_PROTO_PATH" || ( "$RESOLVED_PROTO_PATH" != "$WORKSPACE" && "$RESOLVED_PROTO_PATH" != "${WORKSPACE%/}/"* ) ]]; then
           echo "::error::proto-path must be within the workspace directory"
           exit 1
         fi
+        RESOLVED_BUF_CONFIG=""
         if [[ -n "$INPUT_BUF_CONFIG" ]]; then
           if [[ "$INPUT_BUF_CONFIG" == /* ]]; then
             echo "::error::buf-config must be a relative path within proto-path"
             exit 1
           fi
-          RESOLVED_BUF_CONFIG="$(realpath "${RESOLVED_PROTO_PATH}/${INPUT_BUF_CONFIG}" 2>/dev/null || echo "")"
-          if [[ -z "$RESOLVED_BUF_CONFIG" || ( "$RESOLVED_BUF_CONFIG" != "${RESOLVED_PROTO_PATH}" && "$RESOLVED_BUF_CONFIG" != "${RESOLVED_PROTO_PATH}/"* ) ]]; then
+          RESOLVED_BUF_CONFIG="$(realpath -e "${RESOLVED_PROTO_PATH}/${INPUT_BUF_CONFIG}" 2>/dev/null || echo "")"
+          if [[ ! -f "$RESOLVED_BUF_CONFIG" || "$RESOLVED_BUF_CONFIG" != "${RESOLVED_PROTO_PATH%/}/"* ]]; then
             echo "::error::buf-config must resolve within proto-path"
             exit 1
           fi
         fi
+        echo "proto-path=$RESOLVED_PROTO_PATH" >> "$GITHUB_OUTPUT"
+        echo "buf-config=$RESOLVED_BUF_CONFIG" >> "$GITHUB_OUTPUT"
 
     - name: Setup buf CLI
       uses: bufbuild/buf-setup-action@a47c93e0b1648d5651a065437926377d060baa99  # v1.50.0
@@ -170,8 +179,8 @@ runs:
       id: generate
       shell: bash
       env:
-        PROTO_PATH: ${{ inputs.proto-path }}
-        BUF_CONFIG: ${{ inputs.buf-config }}
+        PROTO_PATH: ${{ steps.validate.outputs.proto-path }}
+        BUF_CONFIG: ${{ steps.validate.outputs.buf-config }}
         WORKSPACE: ${{ github.workspace }}
       run: |
         mkdir -p "${WORKSPACE}/coral-output"
@@ -205,10 +214,34 @@ runs:
         BASE_REF: ${{ github.base_ref }}
         WORKSPACE: ${{ github.workspace }}
       run: |
-        HEAD_SHA=$(git rev-parse HEAD)
+        WORKSPACE="$(realpath -e "$WORKSPACE")"
+        HEAD_REF=$(git -C "$WORKSPACE" symbolic-ref --quiet --short HEAD || git -C "$WORKSPACE" rev-parse HEAD)
 
-        git fetch origin --depth=1 "$BASE_REF"
-        git checkout "origin/$BASE_REF"
+        git -C "$WORKSPACE" fetch origin --depth=1 "$BASE_REF"
+        trap 'git -C "$WORKSPACE" checkout "$HEAD_REF"' EXIT
+        git -C "$WORKSPACE" checkout "origin/$BASE_REF"
+
+        # Resolve the original inputs again: base checkout may change symlink targets.
+        if [[ "$PROTO_PATH" == /* ]]; then
+          PROTO_PATH="$(realpath -e "$PROTO_PATH" 2>/dev/null || echo "")"
+        else
+          PROTO_PATH="$(realpath -e "${WORKSPACE}/${PROTO_PATH}" 2>/dev/null || echo "")"
+        fi
+        if [[ ! -d "$PROTO_PATH" || ( "$PROTO_PATH" != "$WORKSPACE" && "$PROTO_PATH" != "${WORKSPACE%/}/"* ) ]]; then
+          echo "::error::base proto-path must be within the workspace directory"
+          exit 1
+        fi
+        if [[ -n "$BUF_CONFIG" ]]; then
+          if [[ "$BUF_CONFIG" == /* ]]; then
+            echo "::error::buf-config must be a relative path within proto-path"
+            exit 1
+          fi
+          BUF_CONFIG="$(realpath -e "${PROTO_PATH}/${BUF_CONFIG}" 2>/dev/null || echo "")"
+          if [[ ! -f "$BUF_CONFIG" || "$BUF_CONFIG" != "${PROTO_PATH%/}/"* ]]; then
+            echo "::error::base buf-config must resolve within proto-path"
+            exit 1
+          fi
+        fi
 
         cd "$PROTO_PATH"
 
@@ -220,7 +253,9 @@ runs:
             "${WORKSPACE}/coral-output/base.json"
         fi
 
-        git checkout "$HEAD_SHA"
+        cd "$WORKSPACE"
+        git -C "$WORKSPACE" checkout "$HEAD_REF"
+        trap - EXIT
 
         DIFF_REPORT=$("$CORAL_BIN" diff \
           "${WORKSPACE}/coral-output/base.json" \

@@ -141,8 +141,10 @@ jobs:
         run: |
           echo "=== Pages files ==="
           ls -la coral-output/html/
-          test -f coral-output/html/index.html && echo "index.html exists"
-          test -f coral-output/html/graph.json && echo "graph.json exists"
+          test -f coral-output/html/index.html
+          echo "index.html exists"
+          test -f coral-output/html/graph.json
+          echo "graph.json exists"
 
       - name: Setup Pages
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
