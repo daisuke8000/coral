@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useRef, useState } from 'react';
+import { useEffect, useCallback, useMemo, useRef, useState } from 'react';
 import type {
   GraphNode,
   MethodSignature,
@@ -23,7 +23,6 @@ interface DetailPanelProps {
 export function DetailPanel({ node, onClose }: DetailPanelProps) {
   const [panelWidth, setPanelWidth] = useState(DEFAULT_PANEL_WIDTH);
   const [isDragging, setIsDragging] = useState(false);
-  const panelRef = useRef<HTMLDivElement>(null);
   const dragHandleRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
   const { handleTouchStart, handleTouchEnd } = useSwipeToClose(onClose, SWIPE_THRESHOLD);
@@ -65,7 +64,6 @@ export function DetailPanel({ node, onClose }: DetailPanelProps) {
 
   return (
     <div
-      ref={panelRef}
       role="region"
       aria-label={`${node.label} details`}
       data-node-type={node.type}
@@ -165,60 +163,20 @@ function ServiceDetails({
   messages: MessageDef[];
 }) {
   const [expandedTypes, setExpandedTypes] = useState<Set<string>>(new Set());
+  const definitions = useMemo(() => new Map(messages.map((message) => [message.name, message])), [messages]);
 
   const toggleType = (typeName: string) => {
     setExpandedTypes((prev) => {
       const next = new Set(prev);
-      if (next.has(typeName)) {
-        next.delete(typeName);
-      } else {
-        next.add(typeName);
-      }
+      if (!next.delete(typeName)) next.add(typeName);
       return next;
     });
   };
 
-  const findMessage = (typeName: string): MessageDef | undefined => {
-    return messages.find((m) => m.name === typeName);
-  };
-
-  return (
-    <div className="space-y-3">
-      <h3 className="text-sm sm:text-base font-semibold text-neon-magenta flex items-center gap-2">
-        <span>RPC Methods ({methods.length})</span>
-      </h3>
-      {methods.length === 0 ? (
-        <p className="text-text-secondary text-sm italic">No methods defined</p>
-      ) : (
-        <ul className="space-y-3">
-          {methods.map((m) => (
-            <MethodItem
-              key={m.name}
-              method={m}
-              expandedTypes={expandedTypes}
-              onToggleType={toggleType}
-              findMessage={findMessage}
-            />
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-interface MethodItemProps {
-  method: MethodSignature;
-  expandedTypes: Set<string>;
-  onToggleType: (typeName: string) => void;
-  findMessage: (typeName: string) => MessageDef | undefined;
-}
-
-function MethodItem({ method, expandedTypes, onToggleType, findMessage }: MethodItemProps) {
   const renderTypeLink = (typeName: string) => {
-    const messageDef = findMessage(typeName);
     const isExpanded = expandedTypes.has(typeName);
 
-    if (messageDef) {
+    if (definitions.has(typeName)) {
       return (
         <button
           type="button"
@@ -230,7 +188,7 @@ function MethodItem({ method, expandedTypes, onToggleType, findMessage }: Method
             ${isExpanded ? 'bg-neon-cyan/10' : ''}
           `}
           aria-expanded={isExpanded}
-          onClick={() => onToggleType(typeName)}
+          onClick={() => toggleType(typeName)}
         >
           {typeName}
           <span className="text-[0.65rem] sm:text-xs opacity-70">{isExpanded ? '▼' : '▶'}</span>
@@ -241,58 +199,67 @@ function MethodItem({ method, expandedTypes, onToggleType, findMessage }: Method
   };
 
   return (
-    <li className="rpc-method p-2 sm:p-3 bg-bg-dark rounded-lg border border-border-subtle min-w-0">
-      <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
-        <span className="font-semibold text-white text-sm break-all">{method.name}</span>
-        <span className="text-xs sm:text-sm text-text-secondary flex items-center flex-wrap gap-1 min-w-0 break-all">
-          <span>(</span>
-          {renderTypeLink(method.inputType)}
-          <span>)</span>
-          <span className="mx-1">→</span>
-          {renderTypeLink(method.outputType)}
-        </span>
-      </div>
-      <ExpandedFieldsTable typeName={method.inputType} expandedTypes={expandedTypes} findMessage={findMessage} />
-      {method.outputType !== method.inputType && (
-        <ExpandedFieldsTable typeName={method.outputType} expandedTypes={expandedTypes} findMessage={findMessage} />
+    <div className="space-y-3">
+      <h3 className="text-sm sm:text-base font-semibold text-neon-magenta flex items-center gap-2">
+        <span>RPC Methods ({methods.length})</span>
+      </h3>
+      {methods.length === 0 ? (
+        <p className="text-text-secondary text-sm italic">No methods defined</p>
+      ) : (
+        <ul className="space-y-3">
+          {methods.map((method) => (
+            <li key={method.name} className="rpc-method p-2 sm:p-3 bg-bg-dark rounded-lg border border-border-subtle min-w-0">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+                <span className="font-semibold text-white text-sm break-all">{method.name}</span>
+                <span className="text-xs sm:text-sm text-text-secondary flex items-center flex-wrap gap-1 min-w-0 break-all">
+                  <span>(</span>
+                  {renderTypeLink(method.inputType)}
+                  <span>)</span>
+                  <span className="mx-1">→</span>
+                  {renderTypeLink(method.outputType)}
+                </span>
+              </div>
+              {[...new Set([method.inputType, method.outputType])].map((typeName) => {
+                const definition = definitions.get(typeName);
+                return expandedTypes.has(typeName) && definition ? (
+                  <div key={typeName} className="mt-2 ml-2 sm:ml-4 p-2 bg-white/5 rounded-lg border border-white/10 animate-slide-down overflow-x-auto">
+                    <FieldsTable fields={definition.fields} caption={typeName} />
+                  </div>
+                ) : null;
+              })}
+            </li>
+          ))}
+        </ul>
       )}
-    </li>
+    </div>
   );
 }
 
-interface ExpandedFieldsTableProps {
-  typeName: string;
-  expandedTypes: Set<string>;
-  findMessage: (typeName: string) => MessageDef | undefined;
-}
-
-function ExpandedFieldsTable({ typeName, expandedTypes, findMessage }: ExpandedFieldsTableProps) {
-  if (!expandedTypes.has(typeName)) return null;
-  const messageDef = findMessage(typeName);
-  if (!messageDef) return null;
-
+function FieldsTable({ fields, caption }: { fields: FieldInfo[]; caption?: string }) {
+  const compact = caption !== undefined;
+  const padding = compact ? 'p-1 sm:p-1.5' : 'p-2';
   return (
-    <div className="mt-2 ml-2 sm:ml-4 p-2 bg-white/5 rounded-lg border border-white/10 animate-slide-down overflow-x-auto">
-      <table className="w-full text-xs sm:text-sm">
-        <caption className="text-left text-neon-cyan mb-2 break-all">{typeName}</caption>
-        <thead>
-          <tr className="text-text-secondary text-left">
-            <th className="p-1 sm:p-1.5 w-8">#</th>
-            <th className="p-1 sm:p-1.5">Name</th>
-            <th className="p-1 sm:p-1.5">Type</th>
+    <table className={`w-full text-xs sm:text-sm ${compact ? '' : 'min-w-[250px]'}`}>
+      {compact && <caption className="text-left text-neon-cyan mb-2 break-all">{caption}</caption>}
+      <thead>
+        <tr className={`text-text-secondary text-left ${compact ? '' : 'border-b border-white/20'}`}>
+          <th className={`${padding} ${compact ? 'w-8' : 'w-10'}`}>#</th>
+          <th className={padding}>Name</th>
+          <th className={padding}>Type</th>
+        </tr>
+      </thead>
+      <tbody>
+        {fields.map((field) => (
+          <tr key={`${field.number}-${field.name}`} className={compact ? 'border-t border-white/5' : 'border-b border-white/5 hover:bg-white/5 transition-colors'}>
+            <td className={`${padding} text-text-secondary font-mono`}>{field.number}</td>
+            <td className={`${padding} text-white font-medium`}>{field.name}</td>
+            <td className={`${padding} font-mono ${!compact && field.label === 'repeated' ? 'text-neon-yellow' : 'text-neon-cyan/80'}`}>
+              {field.label === 'repeated' ? 'repeated ' : ''}{field.typeName}
+            </td>
           </tr>
-        </thead>
-        <tbody>
-          {messageDef.fields.map((f) => (
-            <tr key={`${f.number}-${f.name}`} className="border-t border-white/5">
-              <td className="p-1 sm:p-1.5 text-text-secondary font-mono">{f.number}</td>
-              <td className="p-1 sm:p-1.5 text-white font-medium">{f.name}</td>
-              <td className="p-1 sm:p-1.5 text-neon-cyan/80 font-mono">{f.label === 'repeated' ? 'repeated ' : ''}{f.typeName}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+        ))}
+      </tbody>
+    </table>
   );
 }
 
@@ -306,26 +273,7 @@ function MessageDetails({ fields }: { fields: FieldInfo[] }) {
         <p className="text-text-secondary text-sm italic">No fields defined</p>
       ) : (
         <div className="table-scroll overflow-x-auto max-w-full">
-          <table className="w-full text-xs sm:text-sm min-w-[250px]">
-            <thead>
-              <tr className="text-text-secondary text-left border-b border-white/20">
-                <th className="p-2 w-10">#</th>
-                <th className="p-2">Name</th>
-                <th className="p-2">Type</th>
-              </tr>
-            </thead>
-            <tbody>
-              {fields.map((f) => (
-                <tr key={`${f.number}-${f.name}`} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                  <td className="p-2 text-text-secondary font-mono">{f.number}</td>
-                  <td className="p-2 text-white font-medium">{f.name}</td>
-                  <td className={`p-2 font-mono ${f.label === 'repeated' ? 'text-neon-yellow' : 'text-neon-cyan/80'}`}>
-                    {f.label === 'repeated' ? 'repeated ' : ''}{f.typeName}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <FieldsTable fields={fields} />
         </div>
       )}
     </div>

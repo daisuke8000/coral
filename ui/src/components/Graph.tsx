@@ -16,13 +16,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-import {
-  ServiceNode,
-  MessageNode,
-  ExternalNode,
-  EnumNode,
-  PackageGroupNode,
-} from '@/components/nodes';
+import { BaseNode, PackageGroupNode } from '@/components/nodes';
 import { calculateLayout, reconcileNodes, type GraphViewEdge } from '@/lib/graphView';
 import { scheduleLayoutFit, type LayoutFit } from '@/lib/layoutViewport';
 import { styleGraphEdge } from '@/lib/graphSelection';
@@ -45,10 +39,10 @@ import {
 import { BUTTON_BASE_STYLES } from '@/constants/styles';
 
 const nodeTypes: NodeTypes = {
-  service: ServiceNode,
-  message: MessageNode,
-  enum: EnumNode,
-  external: ExternalNode,
+  service: BaseNode,
+  message: BaseNode,
+  enum: BaseNode,
+  external: BaseNode,
   package: PackageGroupNode,
 };
 
