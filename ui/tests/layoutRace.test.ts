@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { stripTypeScriptTypes } from 'node:module';
 import { test } from 'node:test';
+import { setImmediate } from 'node:timers';
 import { runInNewContext } from 'node:vm';
 import type { Node } from '@xyflow/react';
 import { calculateLayout, reconcileNodes, type GraphViewEdge } from '../src/lib/graphView.ts';

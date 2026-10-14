@@ -51,14 +51,14 @@ interface GraphProps {
 }
 
 // MiniMap node color mapping (memoized outside component)
-const nodeColors: Record<string, string> = {
-  service: NEON_MAGENTA,
-  message: NEON_CYAN,
-  enum: NEON_YELLOW,
-  external: NEON_GRAY,
-  package: NEON_PURPLE,
-};
-const getNodeColor = (node: Node): string => nodeColors[node.type ?? ''] ?? NEON_WHITE;
+const nodeColors = new Map([
+  ['service', NEON_MAGENTA],
+  ['message', NEON_CYAN],
+  ['enum', NEON_YELLOW],
+  ['external', NEON_GRAY],
+  ['package', NEON_PURPLE],
+]);
+const getNodeColor = (node: Node): string => nodeColors.get(node.type ?? '') ?? NEON_WHITE;
 
 export function Graph({ data }: GraphProps) {
   const {
