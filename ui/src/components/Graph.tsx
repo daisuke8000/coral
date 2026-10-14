@@ -198,7 +198,7 @@ export function Graph({ data }: GraphProps) {
     data.nodes.filter((node) => isNodeHighlighted(node.id)).map((node) => node.package)
   ), [data.nodes, isNodeHighlighted]);
 
-  const styledNodes = useMemo(
+  const styledNodes = useMemo<Node[]>(
     () =>
       nodes.map((node) => ({
         ...node,
