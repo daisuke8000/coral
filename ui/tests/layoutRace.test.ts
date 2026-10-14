@@ -10,8 +10,8 @@ import type { GraphData } from '../src/types/graph.ts';
 // Execute the actual effect/cancellation callbacks, not a second implementation.
 // React mounting and throttled chunk loading remain host browser checks.
 const source = readFileSync(new URL('../src/components/Graph.tsx', import.meta.url), 'utf8');
-const effect = source.match(/useEffect\(\(\) => \{(\n    const controller = new AbortController\(\);[\s\S]*?)\n  \}, \[data, initialNodes/)!;
-const drag = source.match(/const handleNodeDragStart = useCallback\(\(\) => \{([\s\S]*?)\n  \},/)!;
+const effect = source.match(/useEffect\(\(\) => \{(\n {4}const controller = new AbortController\(\);[\s\S]*?)\n {2}\}, \[data, initialNodes/)!;
+const drag = source.match(/const handleNodeDragStart = useCallback\(\(\) => \{([\s\S]*?)\n {2}\},/)!;
 assert.ok(effect && drag, 'layout callbacks must remain exercised by this regression');
 
 const graph: GraphData = {
