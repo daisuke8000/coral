@@ -50,6 +50,7 @@ runs:
   using: 'composite'
   steps:
     - name: Validate inputs
+      id: validate
       shell: bash
       env:
         INPUT_PROTO_PATH: ${{ inputs.proto-path }}
@@ -69,22 +70,41 @@ runs:
           echo "::error::version must be a valid semver tag (e.g. v1.2.3)"
           exit 1
         fi
-        RESOLVED_PROTO_PATH="$(realpath "${WORKSPACE}/${INPUT_PROTO_PATH}" 2>/dev/null || echo "")"
-        if [[ -z "$RESOLVED_PROTO_PATH" || ( "$RESOLVED_PROTO_PATH" != "${WORKSPACE}" && "$RESOLVED_PROTO_PATH" != "${WORKSPACE}/"* ) ]]; then
+        if [[ "$WORKSPACE" == *$'\r'* || "$WORKSPACE" == *$'\n'* ]]; then
+          echo "::error::Resolved paths must not contain carriage returns or newlines"
+          exit 1
+        fi
+        # NUL-delimited reads preserve trailing newlines so they can be rejected below.
+        IFS= read -r -d '' WORKSPACE < <(realpath -ez "$WORKSPACE")
+        if [[ "$INPUT_PROTO_PATH" == /* ]]; then
+          IFS= read -r -d '' RESOLVED_PROTO_PATH < <(realpath -ez "$INPUT_PROTO_PATH" 2>/dev/null) || RESOLVED_PROTO_PATH=""
+        else
+          IFS= read -r -d '' RESOLVED_PROTO_PATH < <(realpath -ez "${WORKSPACE}/${INPUT_PROTO_PATH}" 2>/dev/null) || RESOLVED_PROTO_PATH=""
+        fi
+        if [[ ! -d "$RESOLVED_PROTO_PATH" || ( "$RESOLVED_PROTO_PATH" != "$WORKSPACE" && "$RESOLVED_PROTO_PATH" != "${WORKSPACE%/}/"* ) ]]; then
           echo "::error::proto-path must be within the workspace directory"
           exit 1
         fi
+        RESOLVED_BUF_CONFIG=""
         if [[ -n "$INPUT_BUF_CONFIG" ]]; then
           if [[ "$INPUT_BUF_CONFIG" == /* ]]; then
             echo "::error::buf-config must be a relative path within proto-path"
             exit 1
           fi
-          RESOLVED_BUF_CONFIG="$(realpath "${RESOLVED_PROTO_PATH}/${INPUT_BUF_CONFIG}" 2>/dev/null || echo "")"
-          if [[ -z "$RESOLVED_BUF_CONFIG" || ( "$RESOLVED_BUF_CONFIG" != "${RESOLVED_PROTO_PATH}" && "$RESOLVED_BUF_CONFIG" != "${RESOLVED_PROTO_PATH}/"* ) ]]; then
+          IFS= read -r -d '' RESOLVED_BUF_CONFIG < <(realpath -ez "${RESOLVED_PROTO_PATH}/${INPUT_BUF_CONFIG}" 2>/dev/null) || RESOLVED_BUF_CONFIG=""
+          if [[ ! -f "$RESOLVED_BUF_CONFIG" || "$RESOLVED_BUF_CONFIG" != "${RESOLVED_PROTO_PATH%/}/"* ]]; then
             echo "::error::buf-config must resolve within proto-path"
             exit 1
           fi
         fi
+        for RESOLVED_PATH in "$WORKSPACE" "$RESOLVED_PROTO_PATH" "$RESOLVED_BUF_CONFIG"; do
+          if [[ "$RESOLVED_PATH" == *$'\r'* || "$RESOLVED_PATH" == *$'\n'* ]]; then
+            echo "::error::Resolved paths must not contain carriage returns or newlines"
+            exit 1
+          fi
+        done
+        echo "proto-path=$RESOLVED_PROTO_PATH" >> "$GITHUB_OUTPUT"
+        echo "buf-config=$RESOLVED_BUF_CONFIG" >> "$GITHUB_OUTPUT"
 
     - name: Setup buf CLI
       uses: bufbuild/buf-setup-action@a47c93e0b1648d5651a065437926377d060baa99  # v1.50.0
@@ -141,13 +161,13 @@ runs:
 
     - name: Setup Rust toolchain
       if: steps.download-coral.outputs.result == 'fallback'
-      uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
+      uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f  # stable
       with:
         toolchain: stable
 
     - name: Cache Cargo
       if: steps.download-coral.outputs.result == 'fallback'
-      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5.0.5
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
       with:
         path: |
           ~/.cargo/registry
@@ -170,22 +190,22 @@ runs:
       id: generate
       shell: bash
       env:
-        PROTO_PATH: ${{ inputs.proto-path }}
-        BUF_CONFIG: ${{ inputs.buf-config }}
+        PROTO_PATH: ${{ steps.validate.outputs.proto-path }}
+        BUF_CONFIG: ${{ steps.validate.outputs.buf-config }}
         WORKSPACE: ${{ github.workspace }}
       run: |
         mkdir -p "${WORKSPACE}/coral-output"
         cd "$PROTO_PATH"
 
+        DESCRIPTOR="$(mktemp "${RUNNER_TEMP}/coral-descriptor.XXXXXX")"
+        trap 'rm -f "$DESCRIPTOR"' EXIT
+        BUF_ARGS=()
         if [ -n "$BUF_CONFIG" ]; then
-          buf build --config "$BUF_CONFIG" -o - | "$CORAL_BIN" --output json > \
-            "${WORKSPACE}/coral-output/graph.json"
-          MARKDOWN=$(buf build --config "$BUF_CONFIG" -o - | "$CORAL_BIN" --output markdown)
-        else
-          buf build -o - | "$CORAL_BIN" --output json > \
-            "${WORKSPACE}/coral-output/graph.json"
-          MARKDOWN=$(buf build -o - | "$CORAL_BIN" --output markdown)
+          BUF_ARGS+=(--config "$BUF_CONFIG")
         fi
+        buf build "${BUF_ARGS[@]}" -o - > "$DESCRIPTOR"
+        "$CORAL_BIN" --output json < "$DESCRIPTOR" > "${WORKSPACE}/coral-output/graph.json"
+        MARKDOWN=$("$CORAL_BIN" --output markdown < "$DESCRIPTOR")
 
         echo "json-path=coral-output/graph.json" >> "$GITHUB_OUTPUT"
         DELIMITER="$(openssl rand -hex 16)"
@@ -205,10 +225,48 @@ runs:
         BASE_REF: ${{ github.base_ref }}
         WORKSPACE: ${{ github.workspace }}
       run: |
-        HEAD_SHA=$(git rev-parse HEAD)
+        if [[ "$WORKSPACE" == *$'\r'* || "$WORKSPACE" == *$'\n'* ]]; then
+          echo "::error::Resolved paths must not contain carriage returns or newlines"
+          exit 1
+        fi
+        IFS= read -r -d '' WORKSPACE < <(realpath -ez "$WORKSPACE")
+        if [[ "$WORKSPACE" == *$'\r'* || "$WORKSPACE" == *$'\n'* ]]; then
+          echo "::error::Resolved paths must not contain carriage returns or newlines"
+          exit 1
+        fi
+        HEAD_REF=$(git -C "$WORKSPACE" symbolic-ref --quiet --short HEAD || git -C "$WORKSPACE" rev-parse HEAD)
 
-        git fetch origin --depth=1 "$BASE_REF"
-        git checkout "origin/$BASE_REF"
+        git -C "$WORKSPACE" fetch origin --depth=1 "$BASE_REF"
+        trap 'git -C "$WORKSPACE" checkout "$HEAD_REF"' EXIT
+        git -C "$WORKSPACE" checkout "origin/$BASE_REF"
+
+        # Resolve the original inputs again: base checkout may change symlink targets.
+        if [[ "$PROTO_PATH" == /* ]]; then
+          IFS= read -r -d '' PROTO_PATH < <(realpath -ez "$PROTO_PATH" 2>/dev/null) || PROTO_PATH=""
+        else
+          IFS= read -r -d '' PROTO_PATH < <(realpath -ez "${WORKSPACE}/${PROTO_PATH}" 2>/dev/null) || PROTO_PATH=""
+        fi
+        if [[ ! -d "$PROTO_PATH" || ( "$PROTO_PATH" != "$WORKSPACE" && "$PROTO_PATH" != "${WORKSPACE%/}/"* ) ]]; then
+          echo "::error::base proto-path must be within the workspace directory"
+          exit 1
+        fi
+        if [[ -n "$BUF_CONFIG" ]]; then
+          if [[ "$BUF_CONFIG" == /* ]]; then
+            echo "::error::buf-config must be a relative path within proto-path"
+            exit 1
+          fi
+          IFS= read -r -d '' BUF_CONFIG < <(realpath -ez "${PROTO_PATH}/${BUF_CONFIG}" 2>/dev/null) || BUF_CONFIG=""
+          if [[ ! -f "$BUF_CONFIG" || "$BUF_CONFIG" != "${PROTO_PATH%/}/"* ]]; then
+            echo "::error::base buf-config must resolve within proto-path"
+            exit 1
+          fi
+        fi
+        for RESOLVED_PATH in "$PROTO_PATH" "$BUF_CONFIG"; do
+          if [[ "$RESOLVED_PATH" == *$'\r'* || "$RESOLVED_PATH" == *$'\n'* ]]; then
+            echo "::error::Resolved paths must not contain carriage returns or newlines"
+            exit 1
+          fi
+        done
 
         cd "$PROTO_PATH"
 
@@ -220,7 +278,9 @@ runs:
             "${WORKSPACE}/coral-output/base.json"
         fi
 
-        git checkout "$HEAD_SHA"
+        cd "$WORKSPACE"
+        git -C "$WORKSPACE" checkout "$HEAD_REF"
+        trap - EXIT
 
         DIFF_REPORT=$("$CORAL_BIN" diff \
           "${WORKSPACE}/coral-output/base.json" \
@@ -235,9 +295,9 @@ runs:
 
     - name: Setup Node.js for UI build
       if: inputs.generate-pages == 'true'
-      uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
       with:
-        node-version: '22'
+        node-version: '26'
 
     - name: Build UI for GitHub Pages
       if: inputs.generate-pages == 'true'
@@ -262,18 +322,14 @@ runs:
       if: inputs.comment-on-pr == 'true' && github.event_name == 'pull_request'
       uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3  # v9.0.0
       env:
-        MARKDOWN_REPORT: ${{ steps.generate.outputs.markdown-report }}
         DIFF_REPORT: ${{ steps.diff.outputs.diff-report }}
       with:
         github-token: ${{ inputs.github-token || github.token }}
         script: |
-          const markdownReport = process.env.MARKDOWN_REPORT || '';
           const diffReport = process.env.DIFF_REPORT || '';
 
-          let body = '';
-
           // Show only diff report for PR comments
-          body = '## 🪸 Coral Proto Dependency Analysis\n\n' + (diffReport.trim() || '### No Changes Detected\n\nNo proto schema changes in this PR.');
+          const body = '## 🪸 Coral Proto Dependency Analysis\n\n' + (diffReport.trim() || '### No Changes Detected\n\nNo proto schema changes in this PR.');
 
           const { data: comments } = await github.rest.issues.listComments({
             owner: context.repo.owner,
@@ -302,7 +358,7 @@ runs:
           }
 
     - name: Upload Artifacts
-      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
       with:
         name: coral-${{ github.run_id }}
         path: coral-output

@@ -1,50 +1,29 @@
 import { useState, useCallback, useMemo } from 'react';
 import type { GraphData, GraphNode } from '@/types/graph';
+import { buildSelectionIndex } from '@/lib/graphSelection';
 
-export function useSelection(data: GraphData | null) {
+export function useSelection(data: GraphData | null, selectableNodeIds?: Set<string>) {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const index = useMemo(() => buildSelectionIndex(data), [data]);
 
-  const selectedNode = useMemo((): GraphNode | null => {
-    if (!selectedNodeId || !data) return null;
-    return data.nodes.find((n) => n.id === selectedNodeId) ?? null;
-  }, [selectedNodeId, data]);
+  // A hidden, collapsed, or removed definition must not leave an invisible selection.
+  if (selectedNodeId !== null && (!index.nodes.has(selectedNodeId) ||
+    (selectableNodeIds && !selectableNodeIds.has(selectedNodeId)))) {
+    setSelectedNodeId(null);
+  }
 
-  const connectedNodeIds = useMemo((): Set<string> => {
-    if (!selectedNodeId || !data) return new Set<string>();
-    const ids = new Set<string>();
-    data.edges.forEach((e) => {
-      if (e.source === selectedNodeId) ids.add(e.target);
-      if (e.target === selectedNodeId) ids.add(e.source);
-    });
-    return ids;
-  }, [selectedNodeId, data]);
+  const selectedNode: GraphNode | null = selectedNodeId !== null ? index.nodes.get(selectedNodeId) ?? null : null;
+  const highlightedNodeIds = useMemo(() => selectedNodeId === null ? null : new Set([
+    selectedNodeId,
+    ...(index.neighbors.get(selectedNodeId) ?? []),
+  ]), [selectedNodeId, index]);
 
   const isNodeHighlighted = useCallback(
-    (nodeId: string): boolean => {
-      if (!selectedNodeId) return true;
-      return nodeId === selectedNodeId || connectedNodeIds.has(nodeId);
-    },
-    [selectedNodeId, connectedNodeIds]
+    (nodeId: string): boolean => highlightedNodeIds === null || highlightedNodeIds.has(nodeId),
+    [highlightedNodeIds]
   );
 
-  const isEdgeHighlighted = useCallback(
-    (source: string, target: string): boolean => {
-      if (!selectedNodeId) return true;
-      return source === selectedNodeId || target === selectedNodeId;
-    },
-    [selectedNodeId]
-  );
+  const clearSelection = useCallback(() => setSelectedNodeId(null), []);
 
-  const clearSelection = useCallback(() => {
-    setSelectedNodeId(null);
-  }, []);
-
-  return {
-    selectedNodeId,
-    selectedNode,
-    setSelectedNodeId,
-    isNodeHighlighted,
-    isEdgeHighlighted,
-    clearSelection,
-  };
+  return { selectedNodeId, selectedNode, setSelectedNodeId, highlightedNodeIds, isNodeHighlighted, clearSelection };
 }

@@ -187,12 +187,23 @@ fn test_to_markdown_with_changes() {
     let diff = DiffReport::compute(&base, &head);
     let markdown = diff.to_markdown();
 
-    assert!(markdown.contains("### Changes from Base"));
-    assert!(markdown.contains("✅ Added"));
-    assert!(markdown.contains("⚠️ Modified"));
-    assert!(markdown.contains("❌ Removed"));
-    assert!(markdown.contains("NewMessage"));
-    assert!(markdown.contains("OldMessage"));
+    assert_eq!(
+        markdown,
+        "### Changes from Base\n\n\
+         #### ✅ Added (+1)\n\
+         | Type | Name | Package |\n\
+         |------|------|--------|\n\
+         | Message | NewMessage | user.v1 |\n\n\
+         #### ⚠️ Modified (2)\n\
+         | Type | Name | Changes |\n\
+         |------|------|--------|\n\
+         | Message | User | +1 field(s) |\n\
+         | Service | UserService | +1 method(s) |\n\n\
+         #### ❌ Removed (-1)\n\
+         | Type | Name | Package |\n\
+         |------|------|--------|\n\
+         | Message | OldMessage | user.v1 |\n\n"
+    );
 }
 
 #[test]
@@ -200,4 +211,224 @@ fn test_diff_items_is_empty() {
     let items = DiffItems::default();
     assert!(items.is_empty());
     assert_eq!(items.total_count(), 0);
+}
+
+#[test]
+fn same_name_changes_are_reported_and_order_is_stable() {
+    let base = create_base_model();
+    let mut head = base.clone();
+    if let NodeDetails::Message { fields } = &mut head.nodes[1].details {
+        fields[0].type_name = "int64".into();
+        fields[0].number = 2;
+        fields[0].label = "repeated".into();
+    }
+    if let NodeDetails::Service { methods, .. } = &mut head.nodes[0].details {
+        methods[0].output_type = "Other".into();
+    }
+    let diff = DiffReport::compute(&base, &head);
+    assert_eq!(diff.modified.len(), 2);
+    assert!(matches!(
+        &diff.modified[0].changes[..],
+        [Change::FieldRemoved { .. }, Change::FieldAdded { .. }]
+    ));
+    assert!(matches!(
+        &diff.modified[1].changes[..],
+        [Change::MethodRemoved { .. }, Change::MethodAdded { .. }]
+    ));
+    let json = serde_json::to_string(&diff).unwrap();
+    for _ in 0..10 {
+        assert_eq!(
+            serde_json::to_string(&DiffReport::compute(&base, &head)).unwrap(),
+            json
+        );
+    }
+}
+
+#[test]
+fn enum_renumbering_is_reported() {
+    let mut base = create_base_model();
+    base.nodes[1].node_type = NodeType::Enum;
+    base.nodes[1].details = NodeDetails::Enum {
+        values: vec![crate::domain::EnumValue {
+            name: "ACTIVE".into(),
+            number: 1,
+        }],
+    };
+    let mut head = base.clone();
+    if let NodeDetails::Enum { values } = &mut head.nodes[1].details {
+        values[0].number = 2;
+    }
+    let diff = DiffReport::compute(&base, &head);
+    assert!(matches!(
+        &diff.modified[0].changes[..],
+        [
+            Change::EnumValueRemoved { .. },
+            Change::EnumValueAdded { .. }
+        ]
+    ));
+}
+
+fn assert_enum_reordering_is_reported(values: &[(&str, i32)], allow_alias: bool) {
+    use prost_types::field_descriptor_proto::{Label, Type};
+    use prost_types::{
+        DescriptorProto, EnumDescriptorProto, EnumOptions, EnumValueDescriptorProto,
+        FieldDescriptorProto, FileDescriptorProto, FileDescriptorSet,
+    };
+
+    let mut fds = FileDescriptorSet {
+        file: vec![FileDescriptorProto {
+            name: Some("state.proto".into()),
+            package: Some("p".into()),
+            syntax: Some("proto2".into()),
+            enum_type: vec![EnumDescriptorProto {
+                name: Some("State".into()),
+                value: values
+                    .iter()
+                    .map(|(name, number)| EnumValueDescriptorProto {
+                        name: Some((*name).into()),
+                        number: Some(*number),
+                        ..Default::default()
+                    })
+                    .collect(),
+                options: Some(EnumOptions {
+                    allow_alias: Some(allow_alias),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }],
+            message_type: vec![DescriptorProto {
+                name: Some("Holder".into()),
+                field: vec![FieldDescriptorProto {
+                    name: Some("state".into()),
+                    number: Some(1),
+                    label: Some(Label::Optional as i32),
+                    r#type: Some(Type::Enum as i32),
+                    type_name: Some(".p.State".into()),
+                    // No explicit default: proto2 uses the first declared value.
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }],
+            ..Default::default()
+        }],
+    };
+    // Exercise the ordered JSON snapshots consumed by the diff command.
+    let snapshot = |fds: &FileDescriptorSet| -> GraphModel {
+        let graph = crate::Analyzer::new().analyze(fds);
+        serde_json::from_str(&serde_json::to_string(&graph).unwrap()).unwrap()
+    };
+    let base = snapshot(&fds);
+    assert!(!DiffReport::compute(&base, &base).has_changes());
+    fds.file[0].enum_type[0].value.swap(0, 1);
+    let diff = DiffReport::compute(&base, &snapshot(&fds));
+    assert!(diff.has_changes());
+    assert!(diff.added.is_empty());
+    assert!(diff.removed.is_empty());
+    assert_eq!(diff.modified.len(), 1);
+    assert_eq!(diff.modified[0].node_id, "p.State");
+    assert_eq!(diff.modified[0].changes.len(), 4);
+    for (name, number) in values.iter().take(2) {
+        assert!(diff.modified[0].changes.iter().any(|change| matches!(
+            change,
+            Change::EnumValueRemoved { value } if value.name == *name && value.number == *number
+        )));
+        assert!(diff.modified[0].changes.iter().any(|change| matches!(
+            change,
+            Change::EnumValueAdded { value } if value.name == *name && value.number == *number
+        )));
+    }
+    let markdown = diff.to_markdown();
+    assert!(markdown.contains("| Enum | State | +2 value(s), -2 value(s) |"));
+}
+
+#[test]
+fn proto2_enum_implicit_default_order_change_is_reported() {
+    assert_enum_reordering_is_reported(&[("ON", 1), ("OFF", 2)], false);
+}
+
+#[test]
+fn enum_alias_canonical_precedence_change_is_reported() {
+    // The default number stays 1; its first declared alias changes to ENABLED.
+    assert_enum_reordering_is_reported(&[("ON", 1), ("ENABLED", 1), ("OFF", 2)], true);
+}
+
+#[test]
+fn same_id_definition_kind_change_is_removal_and_addition() {
+    let base = create_base_model();
+    let mut head = base.clone();
+    head.nodes[1].node_type = NodeType::Enum;
+    head.nodes[1].details = NodeDetails::Enum { values: vec![] };
+    let diff = DiffReport::compute(&base, &head);
+    assert_eq!(diff.removed.messages.len(), 1);
+    assert_eq!(diff.added.enums.len(), 1);
+    assert_eq!(diff.removed.messages[0].id, "user.v1.User");
+    assert_eq!(diff.added.enums[0].id, "user.v1.User");
+    assert!(diff.modified.is_empty());
+}
+
+#[test]
+fn each_same_name_field_and_rpc_property_is_compared() {
+    let base = create_base_model();
+    for property in 0..3 {
+        let mut head = base.clone();
+        let NodeDetails::Message { fields } = &mut head.nodes[1].details else {
+            panic!()
+        };
+        match property {
+            0 => fields[0].number += 1,
+            1 => fields[0].type_name = "int64".into(),
+            _ => fields[0].label = "repeated".into(),
+        }
+        let diff = DiffReport::compute(&base, &head);
+        assert!(matches!(
+            &diff.modified[0].changes[..],
+            [Change::FieldRemoved { .. }, Change::FieldAdded { .. }]
+        ));
+    }
+    for input in [true, false] {
+        let mut head = base.clone();
+        let NodeDetails::Service { methods, .. } = &mut head.nodes[0].details else {
+            panic!()
+        };
+        if input {
+            methods[0].input_type = "Other".into();
+        } else {
+            methods[0].output_type = "Other".into();
+        }
+        let diff = DiffReport::compute(&base, &head);
+        assert!(matches!(
+            &diff.modified[0].changes[..],
+            [Change::MethodRemoved { .. }, Change::MethodAdded { .. }]
+        ));
+    }
+}
+
+#[test]
+fn field_reordering_is_not_a_schema_change() {
+    let mut base = create_head_model();
+    let mut head = base.clone();
+    let NodeDetails::Message { fields } = &mut head.nodes[1].details else {
+        panic!()
+    };
+    fields.reverse();
+    assert!(!DiffReport::compute(&base, &head).has_changes());
+    // A larger definition also exercises the indexed (not per-item scan) path.
+    let NodeDetails::Message { fields } = &mut base.nodes[1].details else {
+        panic!()
+    };
+    fields.extend((0..4096).map(|i| FieldInfo {
+        name: format!("field_{i:04}"),
+        number: i + 10,
+        type_name: "string".into(),
+        label: "optional".into(),
+    }));
+    head = base.clone();
+    let NodeDetails::Message { fields } = &mut head.nodes[1].details else {
+        panic!()
+    };
+    for field in fields {
+        field.type_name = "bytes".into();
+    }
+    let diff = DiffReport::compute(&base, &head);
+    assert_eq!(diff.modified[0].changes.len(), 2 * 4098);
 }

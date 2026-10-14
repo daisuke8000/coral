@@ -2,7 +2,7 @@
 //!
 //! Compares two GraphModels and generates a report showing added, modified, and removed items.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
@@ -69,32 +69,26 @@ impl DiffReport {
     /// Compute differences between base and head GraphModels.
     #[must_use]
     pub fn compute(base: &GraphModel, head: &GraphModel) -> Self {
-        let base_nodes: HashMap<&str, &Node> =
+        let base_nodes: BTreeMap<&str, &Node> =
             base.nodes.iter().map(|n| (n.id.as_str(), n)).collect();
-        let head_nodes: HashMap<&str, &Node> =
+        let head_nodes: BTreeMap<&str, &Node> =
             head.nodes.iter().map(|n| (n.id.as_str(), n)).collect();
 
-        let base_ids: HashSet<&str> = base_nodes.keys().copied().collect();
-        let head_ids: HashSet<&str> = head_nodes.keys().copied().collect();
-
-        let added = Self::collect_diff_items(head_ids.difference(&base_ids).copied(), &head_nodes);
-        let removed =
-            Self::collect_diff_items(base_ids.difference(&head_ids).copied(), &base_nodes);
-
-        let mut modified: Vec<ModifiedItem> = base_ids
-            .intersection(&head_ids)
-            .filter_map(|id| {
-                let base_node = base_nodes.get(id)?;
+        // Ordered indexes keep every category deterministic without extra ID sets/sorts.
+        let modified = base_nodes
+            .iter()
+            .filter_map(|(id, base_node)| {
                 let head_node = head_nodes.get(id)?;
+                if base_node.node_type != head_node.node_type {
+                    return None;
+                }
                 Self::compute_node_changes(base_node, head_node)
             })
             .collect();
 
-        modified.sort_by(|a, b| a.node_id.cmp(&b.node_id));
-
         Self {
-            added,
-            removed,
+            added: Self::collect_diff_items(&head_nodes, &base_nodes),
+            removed: Self::collect_diff_items(&base_nodes, &head_nodes),
             modified,
         }
     }
@@ -105,27 +99,28 @@ impl DiffReport {
         !self.added.is_empty() || !self.removed.is_empty() || !self.modified.is_empty()
     }
 
-    fn collect_diff_items<'a>(
-        ids: impl Iterator<Item = &'a str>,
-        nodes: &HashMap<&str, &Node>,
+    fn collect_diff_items(
+        nodes: &BTreeMap<&str, &Node>,
+        other: &BTreeMap<&str, &Node>,
     ) -> DiffItems {
         let mut items = DiffItems::default();
 
-        for id in ids {
-            if let Some(node) = nodes.get(id) {
-                let diff_node = DiffNode::from(*node);
-                match node.node_type {
-                    NodeType::Service => items.services.push(diff_node),
-                    NodeType::Message => items.messages.push(diff_node),
-                    NodeType::Enum => items.enums.push(diff_node),
-                    NodeType::External => {}
-                }
+        for (id, node) in nodes {
+            // A kind replacement at the same ID is an addition plus removal.
+            if other
+                .get(id)
+                .is_some_and(|other| other.node_type == node.node_type)
+            {
+                continue;
+            }
+            let diff_node = DiffNode::from(*node);
+            match node.node_type {
+                NodeType::Service => items.services.push(diff_node),
+                NodeType::Message => items.messages.push(diff_node),
+                NodeType::Enum => items.enums.push(diff_node),
+                NodeType::External => {}
             }
         }
-
-        items.services.sort_by(|a, b| a.id.cmp(&b.id));
-        items.messages.sort_by(|a, b| a.id.cmp(&b.id));
-        items.enums.sort_by(|a, b| a.id.cmp(&b.id));
 
         items
     }
@@ -147,6 +142,7 @@ impl DiffReport {
                 |m| m.name.as_str(),
                 |m| Change::MethodAdded { method: m },
                 |m| Change::MethodRemoved { method: m },
+                false,
             ),
 
             (
@@ -162,6 +158,7 @@ impl DiffReport {
                 |f| f.name.as_str(),
                 |f| Change::FieldAdded { field: f },
                 |f| Change::FieldRemoved { field: f },
+                false,
             ),
 
             (
@@ -177,6 +174,7 @@ impl DiffReport {
                 |v| v.name.as_str(),
                 |v| Change::EnumValueAdded { value: v },
                 |v| Change::EnumValueRemoved { value: v },
+                true, // Declaration order controls implicit defaults and alias precedence.
             ),
 
             _ => vec![],
@@ -196,27 +194,34 @@ impl DiffReport {
     }
 
     /// Generic diff computation for named items.
-    fn compute_item_changes<T: Clone>(
+    fn compute_item_changes<T: Clone + PartialEq>(
         base_items: &[T],
         head_items: &[T],
         get_name: fn(&T) -> &str,
         make_added: fn(T) -> Change,
         make_removed: fn(T) -> Change,
+        order_sensitive: bool,
     ) -> Vec<Change> {
-        let base_set: HashSet<&str> = base_items.iter().map(get_name).collect();
-        let head_set: HashSet<&str> = head_items.iter().map(get_name).collect();
-
+        let base: BTreeMap<&str, (usize, &T)> = base_items
+            .iter()
+            .enumerate()
+            .map(|(index, item)| (get_name(item), (index, item)))
+            .collect();
+        let head: BTreeMap<&str, (usize, &T)> = head_items
+            .iter()
+            .enumerate()
+            .map(|(index, item)| (get_name(item), (index, item)))
+            .collect();
         let mut changes = Vec::new();
 
-        for name in head_set.difference(&base_set) {
-            if let Some(item) = head_items.iter().find(|i| get_name(i) == *name) {
-                changes.push(make_added(item.clone()));
-            }
-        }
-
-        for name in base_set.difference(&head_set) {
-            if let Some(item) = base_items.iter().find(|i| get_name(i) == *name) {
-                changes.push(make_removed(item.clone()));
+        // A changed definition is a removal plus addition, preserving the report contract.
+        for (items, other, change) in [(&base, &head, make_removed), (&head, &base, make_added)] {
+            for (name, (index, item)) in items {
+                if other.get(name).is_none_or(|(other_index, other_item)| {
+                    *other_item != *item || (order_sensitive && other_index != index)
+                }) {
+                    changes.push(change((*item).clone()));
+                }
             }
         }
 

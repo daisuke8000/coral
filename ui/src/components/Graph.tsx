@@ -1,4 +1,4 @@
-import { useMemo, useCallback, useState, useEffect } from 'react';
+import { useMemo, useCallback, useState, useEffect, useRef } from 'react';
 import {
   ReactFlow,
   Background,
@@ -8,20 +8,18 @@ import {
   useNodesState,
   useEdgesState,
   type Node,
-  type Edge,
+  type NodeTypes,
   type NodeMouseHandler,
+  type NodeChange,
+  type ReactFlowInstance,
   BackgroundVariant,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-import {
-  ServiceNode,
-  MessageNode,
-  ExternalNode,
-  EnumNode,
-  PackageGroupNode,
-  type PackageNodeData,
-} from '@/components/nodes';
+import { BaseNode, PackageGroupNode } from '@/components/nodes';
+import { calculateLayout, reconcileNodes, type GraphViewEdge } from '@/lib/graphView';
+import { scheduleLayoutFit, type LayoutFit } from '@/lib/layoutViewport';
+import { styleGraphEdge } from '@/lib/graphSelection';
 import { DetailPanel } from '@/components/DetailPanel';
 import { PackageFilterPanel } from '@/components/PackageFilterPanel';
 import { useSelection } from '@/hooks/useSelection';
@@ -29,7 +27,7 @@ import { useAutoLayout } from '@/hooks/useAutoLayout';
 import { usePackageGroups } from '@/hooks/usePackageGroups';
 import { usePackageVisibility } from '@/hooks/usePackageVisibility';
 import { useIsMobile } from '@/hooks/useIsMobile';
-import type { GraphData, NodeData, NodeType } from '@/types/graph';
+import type { GraphData } from '@/types/graph';
 import {
   NEON_MAGENTA,
   NEON_CYAN,
@@ -40,12 +38,11 @@ import {
 } from '@/constants/layout';
 import { BUTTON_BASE_STYLES } from '@/constants/styles';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const nodeTypes: Record<string, any> = {
-  service: ServiceNode,
-  message: MessageNode,
-  enum: EnumNode,
-  external: ExternalNode,
+const nodeTypes: NodeTypes = {
+  service: BaseNode,
+  message: BaseNode,
+  enum: BaseNode,
+  external: BaseNode,
   package: PackageGroupNode,
 };
 
@@ -53,160 +50,17 @@ interface GraphProps {
   data: GraphData;
 }
 
-interface CalculateLayoutOptions {
-  expandedPackages: Set<string>;
-  togglePackage: (packageId: string) => void;
-  visiblePackages: Set<string>;
-  nodeToPackageMap: Map<string, string>;
-}
-
 // MiniMap node color mapping (memoized outside component)
-const getNodeColor = (node: Node): string => {
-  switch (node.type) {
-    case 'service':
-      return NEON_MAGENTA;
-    case 'message':
-      return NEON_CYAN;
-    case 'enum':
-      return NEON_YELLOW;
-    case 'external':
-      return NEON_GRAY;
-    case 'package':
-      return NEON_PURPLE;
-    default:
-      return NEON_WHITE;
-  }
-};
-
-function calculateLayout(
-  data: GraphData,
-  options: CalculateLayoutOptions
-): { nodes: Node[]; edges: Edge[] } {
-  const { expandedPackages, togglePackage, visiblePackages, nodeToPackageMap } = options;
-  const packageMap = new Map<string, typeof data.nodes>();
-
-  // Group nodes by package (only visible packages)
-  data.nodes.forEach((node) => {
-    if (!visiblePackages.has(node.package)) return;
-    const existing = packageMap.get(node.package) || [];
-    existing.push(node);
-    packageMap.set(node.package, existing);
-  });
-
-  const nodes: Node[] = [];
-  let packageX = 0;
-  const packageWidth = 300;
-  const nodeHeight = 120;
-  const packagePadding = 100;
-  const packageNodeHeight = 60;
-
-  const parentChildEdges: Edge[] = [];
-
-  packageMap.forEach((packageNodes, packageId) => {
-    const isExpanded = expandedPackages.has(packageId);
-    const packageLabel = packageId || 'default';
-    const pkgNodeId = `pkg-${packageId}`;
-
-    const packageNodeData: PackageNodeData = {
-      label: packageLabel,
-      packageId: packageId,
-      nodeCount: packageNodes.length,
-      isExpanded: isExpanded,
-      onToggle: togglePackage,
-    };
-
-    nodes.push({
-      id: pkgNodeId,
-      type: 'package',
-      position: {
-        x: packageX + 50,
-        y: 0,
-      },
-      data: packageNodeData,
-    });
-
-    if (isExpanded) {
-      packageNodes.forEach((node, nodeIndex) => {
-        const nodeData: NodeData = {
-          label: node.label,
-          file: node.file,
-          package: node.package,
-          nodeType: node.type as NodeType,
-          details: node.details,
-        };
-        nodes.push({
-          id: node.id,
-          type: node.type,
-          position: {
-            x: 0,
-            y: (nodeIndex + 1) * nodeHeight + packageNodeHeight,
-          },
-          data: nodeData,
-          parentId: pkgNodeId,
-        });
-
-        parentChildEdges.push({
-          id: `pkg-edge-${pkgNodeId}-${node.id}`,
-          source: pkgNodeId,
-          target: node.id,
-          type: 'smoothstep',
-          style: { stroke: 'rgba(128, 128, 255, 0.4)', strokeWidth: 1, strokeDasharray: '4 2' },
-        });
-      });
-    }
-
-    packageX += packageWidth + packagePadding;
-  });
-
-  // Create edges with smart routing (filter by visible packages)
-  const edgeSet = new Set<string>();
-  const edges: Edge[] = [];
-
-  data.edges.forEach((edge, index) => {
-    const sourcePackage = nodeToPackageMap.get(edge.source);
-    const targetPackage = nodeToPackageMap.get(edge.target);
-
-    // Skip edges where either endpoint's package is hidden
-    if (sourcePackage && !visiblePackages.has(sourcePackage)) return;
-    if (targetPackage && !visiblePackages.has(targetPackage)) return;
-
-    const sourceExpanded = sourcePackage ? expandedPackages.has(sourcePackage) : true;
-    const targetExpanded = targetPackage ? expandedPackages.has(targetPackage) : true;
-
-    // Determine actual source and target based on expansion state
-    const actualSource = sourceExpanded ? edge.source : `pkg-${sourcePackage}`;
-    const actualTarget = targetExpanded ? edge.target : `pkg-${targetPackage}`;
-
-    // Skip self-loops on package level
-    if (actualSource === actualTarget) return;
-
-    // Deduplicate edges
-    const edgeKey = `${actualSource}->${actualTarget}`;
-    if (edgeSet.has(edgeKey)) return;
-    edgeSet.add(edgeKey);
-
-    edges.push({
-      id: `edge-${index}-${edgeKey}`,
-      source: actualSource,
-      target: actualTarget,
-      animated: true,
-      style: { stroke: 'rgba(255, 255, 255, 0.4)', strokeWidth: 2 },
-    });
-  });
-
-  return { nodes, edges: [...parentChildEdges, ...edges] };
-}
+const nodeColors = new Map([
+  ['service', NEON_MAGENTA],
+  ['message', NEON_CYAN],
+  ['enum', NEON_YELLOW],
+  ['external', NEON_GRAY],
+  ['package', NEON_PURPLE],
+]);
+const getNodeColor = (node: Node): string => nodeColors.get(node.type ?? '') ?? NEON_WHITE;
 
 export function Graph({ data }: GraphProps) {
-  const {
-    selectedNodeId,
-    selectedNode,
-    setSelectedNodeId,
-    isNodeHighlighted,
-    isEdgeHighlighted,
-    clearSelection,
-  } = useSelection(data);
-
   const {
     expandedPackages,
     togglePackage,
@@ -224,132 +78,225 @@ export function Graph({ data }: GraphProps) {
   } = usePackageVisibility(data);
 
   const [filterPanelOpen, setFilterPanelOpen] = useState(false);
+  const [motionEnabled, setMotionEnabled] = useState(true);
+  const filterButtonRef = useRef<HTMLButtonElement>(null);
+  const workbenchRef = useRef<HTMLDivElement>(null);
+  const flowRef = useRef<ReactFlowInstance<Node, GraphViewEdge> | null>(null);
+  const fitRequestedFor = useRef<GraphData | null>(null);
+  const fitRef = useRef<LayoutFit | null>(null);
+  const layoutControllerRef = useRef<AbortController | null>(null);
+  const fitDurationRef = useRef(500);
+  const [reducedMotion, setReducedMotion] = useState(() =>
+    typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  );
 
-  const nodeToPackageMap = useMemo(() => {
-    const map = new Map<string, string>();
-    data.nodes.forEach((node) => {
-      map.set(node.id, node.package);
-    });
-    return map;
-  }, [data.nodes]);
+  useEffect(() => {
+    const preference = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const update = () => setReducedMotion(preference.matches);
+    preference.addEventListener('change', update);
+    return () => preference.removeEventListener('change', update);
+  }, []);
+
+  useEffect(() => {
+    fitDurationRef.current = motionEnabled && !reducedMotion ? 500 : 0;
+    if (fitDurationRef.current === 0) fitRef.current?.finishWithoutMotion();
+  }, [motionEnabled, reducedMotion]);
+
+  const nodeToPackageMap = useMemo(
+    () => new Map(data.nodes.map((node) => [node.id, node.package])),
+    [data.nodes]
+  );
 
   const { nodes: initialNodes, edges: initialEdges } = useMemo(
     () => calculateLayout(data, { expandedPackages, togglePackage, visiblePackages, nodeToPackageMap }),
     [data, expandedPackages, togglePackage, visiblePackages, nodeToPackageMap]
   );
 
+  const selectableNodeIds = useMemo(() => new Set(
+    initialNodes.filter((node) => node.type !== 'package').map((node) => node.id)
+  ), [initialNodes]);
+  const {
+    selectedNodeId, selectedNode, setSelectedNodeId,
+    isNodeHighlighted, highlightedNodeIds, clearSelection,
+  } = useSelection(data, selectableNodeIds);
+
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const { getLayoutedNodes } = useAutoLayout();
   const [layoutMode, setLayoutMode] = useState<'flat' | 'auto'>('flat');
+  const [layoutError, setLayoutError] = useState(false);
   const isMobile = useIsMobile();
 
   useEffect(() => {
-    const { nodes: newNodes, edges: newEdges } = calculateLayout(data, {
-      expandedPackages,
-      togglePackage,
-      visiblePackages,
-      nodeToPackageMap,
-    });
-    if (layoutMode === 'auto') {
-      // Strip parentId so Dagre can layout all nodes flat
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const flatNodes = newNodes.map(({ parentId: _parentId, ...rest }) => rest);
-      const layouted = getLayoutedNodes(flatNodes, newEdges, 'TB');
-      setNodes(layouted);
-    } else {
-      setNodes(newNodes);
+    if (!isMobile || !filterPanelOpen || !selectedNode) return;
+    // Packages wins when desktop's two panes become full-width mobile sheets.
+    const filter = workbenchRef.current?.querySelector('#package-filter-panel');
+    if (filter && !filter.contains(document.activeElement)) {
+      filter.querySelector<HTMLInputElement>('input[type="search"]')?.focus();
     }
-    setEdges(newEdges);
-  }, [expandedPackages, visiblePackages, data, togglePackage, nodeToPackageMap, setNodes, setEdges, layoutMode, getLayoutedNodes]);
+  }, [isMobile, filterPanelOpen, selectedNode]);
 
-  const styledNodes = useMemo(
+  const cancelPendingFit = useCallback(() => {
+    fitRef.current?.cancel();
+    fitRef.current = null;
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    layoutControllerRef.current = controller;
+    let shouldFit = fitRequestedFor.current === data;
+    fitRequestedFor.current = null;
+    // User pan/zoom can cancel framing even while the Dagre chunk is still loading.
+    fitRef.current = { cancel: () => { shouldFit = false; }, finishWithoutMotion: () => {} };
+    // Topology is not cancellable: a drag must not discard expansion or filtering.
+    setEdges(initialEdges);
+    const apply = (layouted: Node[]) => {
+      if (controller.signal.aborted) return;
+      setNodes(layouted);
+      if (shouldFit) {
+        fitRef.current = scheduleLayoutFit(
+          () => flowRef.current, layouted, () => fitDurationRef.current
+        );
+      }
+    };
+    if (layoutMode === 'auto') {
+      setNodes((current) => reconcileNodes(current, initialNodes));
+      void getLayoutedNodes(initialNodes, initialEdges, 'TB', controller.signal).then((layouted) => {
+        if (controller.signal.aborted) return;
+        setLayoutError(false);
+        apply(layouted);
+      }).catch(() => {
+        if (controller.signal.aborted) return;
+        setLayoutError(true);
+        apply(initialNodes);
+      });
+    } else {
+      apply(initialNodes);
+    }
+    return () => {
+      controller.abort();
+      cancelPendingFit();
+    };
+  }, [data, initialNodes, initialEdges, setNodes, setEdges, layoutMode, getLayoutedNodes, cancelPendingFit]);
+
+  const highlightedPackages = useMemo(() => new Set(
+    data.nodes.filter((node) => isNodeHighlighted(node.id)).map((node) => node.package)
+  ), [data.nodes, isNodeHighlighted]);
+
+  const styledNodes = useMemo<Node[]>(
     () =>
       nodes.map((node) => ({
         ...node,
-        className: isNodeHighlighted(node.id) ? '' : 'dimmed',
+        className: isNodeHighlighted(node.id) || (node.type === 'package' && highlightedPackages.has(String(node.data.packageId))) ? '' : 'dimmed',
         selected: node.id === selectedNodeId,
       })),
-    [nodes, selectedNodeId, isNodeHighlighted]
+    [nodes, selectedNodeId, isNodeHighlighted, highlightedPackages]
   );
 
   const styledEdges = useMemo(
     () =>
-      edges.map((edge) => {
-        const highlighted = isEdgeHighlighted(edge.source, edge.target);
-        return {
-          ...edge,
-          style: highlighted
-            ? { stroke: 'var(--color-neon-cyan)', strokeWidth: 3 }
-            : { stroke: 'rgba(255, 255, 255, 0.1)', strokeWidth: 1 },
-          animated: highlighted,
-        };
-      }),
-    [edges, isEdgeHighlighted]
+      edges.map((edge) => styleGraphEdge(edge, selectedNodeId, highlightedNodeIds, motionEnabled)),
+    [edges, selectedNodeId, highlightedNodeIds, motionEnabled]
   );
 
-  const onConnect = useCallback(() => {}, []);
+  const handleNodeDragStart = useCallback(() => {
+    layoutControllerRef.current?.abort();
+    cancelPendingFit();
+  }, [cancelPendingFit]);
+
+  const selectDefinition = useCallback((id: string) => {
+    setSelectedNodeId(id);
+    if (isMobile) setFilterPanelOpen(false);
+  }, [setSelectedNodeId, isMobile]);
+
+  const handleNodesChange = useCallback((changes: NodeChange<Node>[]) => {
+    // Includes keyboard node movement, which does not emit onNodeDragStart.
+    if (changes.some((change) => change.type === 'position' && change.dragging !== undefined)) handleNodeDragStart();
+    onNodesChange(changes);
+    // React Flow's keyboard selection uses node changes rather than a mouse click.
+    const selection = changes.find((change) => change.type === 'select' && change.selected);
+    if (selection?.type === 'select' && selectableNodeIds.has(selection.id)) selectDefinition(selection.id);
+  }, [onNodesChange, selectableNodeIds, selectDefinition, handleNodeDragStart]);
 
   const onNodeClick: NodeMouseHandler = useCallback(
     (_, node) => {
       // Don't select package nodes for detail panel
       if (node.type !== 'package') {
-        setSelectedNodeId(node.id);
+        selectDefinition(node.id);
       }
     },
-    [setSelectedNodeId]
+    [selectDefinition]
   );
 
-  const onPaneClick = useCallback(() => {
+  const handleDetailClose = useCallback(() => {
+    if (selectedNodeId !== null) {
+      workbenchRef.current?.querySelector<HTMLElement>(
+        `.react-flow__node[data-id="${CSS.escape(selectedNodeId)}"]`
+      )?.focus();
+    }
     clearSelection();
-  }, [clearSelection]);
+  }, [selectedNodeId, clearSelection]);
+
+  const changeAllPackages = useCallback((expanded: boolean) => {
+    fitRequestedFor.current = data;
+    if (expanded) expandAll();
+    else collapseAll();
+  }, [data, expandAll, collapseAll]);
 
   const handleLayoutToggle = useCallback(() => {
-    if (layoutMode === 'flat') {
-      // Strip parentId so Dagre can layout all nodes flat
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const stripped = nodes.map(({ parentId: _parentId, ...rest }) => rest);
-      const layoutedNodes = getLayoutedNodes(stripped, edges, 'TB');
-      setNodes(layoutedNodes);
-      setLayoutMode('auto');
-    } else {
-      const { nodes: flatNodes } = calculateLayout(data, {
-        expandedPackages,
-        togglePackage,
-        visiblePackages,
-        nodeToPackageMap,
-      });
-      setNodes(flatNodes);
-      setLayoutMode('flat');
-    }
-  }, [layoutMode, nodes, edges, getLayoutedNodes, setNodes, data, expandedPackages, togglePackage, visiblePackages, nodeToPackageMap]);
+    fitRequestedFor.current = data;
+    setLayoutError(false);
+    setLayoutMode((mode) => mode === 'flat' ? 'auto' : 'flat');
+  }, [data]);
 
   const handleFilterPanelToggle = useCallback(() => {
+    // On narrow screens the two bottom sheets would otherwise cover each other.
+    if (isMobile) clearSelection();
     setFilterPanelOpen((prev) => !prev);
-  }, []);
+  }, [isMobile, clearSelection]);
 
   const handleFilterPanelClose = useCallback(() => {
     setFilterPanelOpen(false);
+    filterButtonRef.current?.focus();
   }, []);
 
   const isAllExpanded = expandedCount === totalPackages;
   const isAllCollapsed = expandedCount === 0;
 
   return (
-    <div className="relative flex-1 w-full h-full overflow-hidden">
+    <div
+      ref={workbenchRef}
+      className="graph-workbench relative flex-1 w-full h-full min-h-0 overflow-hidden"
+      onPointerDownCapture={(event) => {
+        if ((event.target as Element).closest('.neon-controls, .neon-minimap')) cancelPendingFit();
+      }}
+      onClickCapture={(event) => {
+        // Controls also emit programmatic viewport events when activated by keyboard.
+        if ((event.target as Element).closest('.neon-controls')) cancelPendingFit();
+      }}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape') {
+          handleDetailClose();
+          if (filterPanelOpen) handleFilterPanelClose();
+        }
+      }}
+    >
       <ReactFlow
         nodes={styledNodes}
         edges={styledEdges}
-        onNodesChange={onNodesChange}
+        onNodesChange={handleNodesChange}
         onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
+        onInit={(instance) => { flowRef.current = instance; }}
+        onMoveStart={(event) => { if (event) cancelPendingFit(); }}
+        onNodeDragStart={handleNodeDragStart}
+        nodesConnectable={false}
         onNodeClick={onNodeClick}
-        onPaneClick={onPaneClick}
+        onPaneClick={clearSelection}
         nodeTypes={nodeTypes}
         fitView
         attributionPosition="bottom-left"
-        className="neon-flow"
-        minZoom={0.1}
+        className={`neon-flow ${motionEnabled ? '' : 'quiet-flow'}`}
+        minZoom={0.01}
         maxZoom={2}
         panOnScroll={true}
         zoomOnPinch={true}
@@ -361,7 +308,7 @@ export function Graph({ data }: GraphProps) {
           size={1}
           color="rgba(255, 255, 255, 0.1)"
         />
-        <Controls className="neon-controls" />
+        <Controls className="neon-controls" fitViewOptions={{ duration: motionEnabled && !reducedMotion ? 500 : 0 }} />
         {/* MiniMap hidden on tablet and below */}
         {!isMobile && (
           <MiniMap
@@ -370,48 +317,59 @@ export function Graph({ data }: GraphProps) {
             maskColor="rgba(10, 10, 15, 0.8)"
           />
         )}
-        <Panel position="top-right" className="m-2 flex flex-col sm:flex-row gap-2">
+        <Panel position="top-right" className="graph-toolbar" role="group" aria-label="Graph tools">
           <button
-            className={`${BUTTON_BASE_STYLES} ${filterPanelOpen ? 'bg-neon-cyan/20 border-neon-cyan' : ''}`}
+            className={BUTTON_BASE_STYLES}
+            onClick={() => setMotionEnabled((enabled) => !enabled)}
+            aria-pressed={motionEnabled}
+            title="Toggle graph animations"
+          >
+            {motionEnabled ? 'Motion on' : 'Motion off'}
+          </button>
+          <button
+            ref={filterButtonRef}
+            aria-expanded={filterPanelOpen}
+            aria-controls="package-filter-panel"
+            className={BUTTON_BASE_STYLES}
             onClick={handleFilterPanelToggle}
             title="Filter packages"
             aria-label="Filter packages"
           >
-            <span className="sm:hidden">📦</span>
-            <span className="hidden sm:inline">📦 Filter</span>
+            Packages
           </button>
+          {[true, false].map((expanded) => (
+            <button
+              key={String(expanded)}
+              className={BUTTON_BASE_STYLES}
+              onClick={() => changeAllPackages(expanded)}
+              disabled={expanded ? isAllExpanded : isAllCollapsed}
+              title={expanded ? 'Expand all packages' : 'Collapse all packages'}
+              aria-label={expanded ? 'Expand all packages' : 'Collapse all packages'}
+            >
+              {expanded ? 'Expand all' : 'Collapse all'}
+            </button>
+          ))}
           <button
             className={BUTTON_BASE_STYLES}
-            onClick={expandAll}
-            disabled={isAllExpanded}
-            title="Expand all packages"
-            aria-label="Expand all packages"
-          >
-            <span className="sm:hidden">📂</span>
-            <span className="hidden sm:inline">📂 Expand All</span>
-          </button>
-          <button
-            className={BUTTON_BASE_STYLES}
-            onClick={collapseAll}
-            disabled={isAllCollapsed}
-            title="Collapse all packages"
-            aria-label="Collapse all packages"
-          >
-            <span className="sm:hidden">📁</span>
-            <span className="hidden sm:inline">📁 Collapse All</span>
-          </button>
-          <button
-            className={BUTTON_BASE_STYLES}
+            aria-pressed={layoutMode === 'auto'}
             onClick={handleLayoutToggle}
             title={layoutMode === 'flat' ? 'Switch to hierarchical layout' : 'Switch to flat layout'}
             aria-label={layoutMode === 'flat' ? 'Switch to hierarchical layout' : 'Switch to flat layout'}
           >
-            <span className="sm:hidden">{layoutMode === 'flat' ? '📊' : '📋'}</span>
-            <span className="hidden sm:inline">
-              {layoutMode === 'flat' ? '📊 AutoLayout' : '📋 FlatLayout'}
-            </span>
+            {layoutMode === 'flat' ? 'AutoLayout' : 'Flat layout'}
           </button>
         </Panel>
+        {layoutError && layoutMode === 'auto' && visiblePackages.size > 0 && (
+          <Panel position="bottom-center" className="graph-empty" role="status">
+            <p className="text-sm text-text-secondary">AutoLayout unavailable. Flat positions are shown; reload to retry.</p>
+          </Panel>
+        )}
+        {visiblePackages.size === 0 && totalPackages > 0 && (
+          <Panel position="bottom-center" className="graph-empty">
+            <p className="text-sm text-text-secondary">All packages are hidden.</p>
+            <button className={BUTTON_BASE_STYLES} onClick={showAllPackages}>Show all packages</button>
+          </Panel>
+        )}
       </ReactFlow>
       {filterPanelOpen && (
         <PackageFilterPanel
@@ -423,7 +381,7 @@ export function Graph({ data }: GraphProps) {
           onClose={handleFilterPanelClose}
         />
       )}
-      <DetailPanel node={selectedNode} onClose={clearSelection} />
+      <DetailPanel node={isMobile && filterPanelOpen ? null : selectedNode} onClose={handleDetailClose} />
     </div>
   );
 }

@@ -20,23 +20,22 @@ export const PackageGroupNode = memo(function PackageGroupNode({ data }: Package
   };
 
   return (
-    <div className="package-group-node bg-neon-purple/10 border-2 border-neon-purple rounded-xl p-2.5 sm:p-3 min-w-[160px] sm:min-w-[200px] shadow-[0_0_10px_rgba(128,128,255,0.5),0_0_20px_rgba(128,128,255,0.3)] transition-all duration-300 hover:shadow-[0_0_15px_rgba(128,128,255,0.6),0_0_30px_rgba(128,128,255,0.4)] hover:scale-[1.02]">
+    <div className="package-group-node rounded-xl transition-transform duration-300 hover:scale-[1.02]">
       <Handle type="target" position={Position.Top} className="handle-top" />
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 h-full">
         <button
-          className="bg-transparent border-none text-text-primary cursor-pointer p-1 text-xs sm:text-sm transition-transform duration-200 hover:scale-125 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center touch-manipulation"
+          className="package-toggle nodrag nopan"
           onClick={handleClick}
           aria-expanded={data.isExpanded}
-          aria-label={data.isExpanded ? 'Collapse package' : 'Expand package'}
+          aria-label={`${data.isExpanded ? 'Collapse' : 'Expand'} package ${data.label}`}
         >
-          <span className="inline-block transition-transform duration-200">
-            {data.isExpanded ? '▼' : '▶'}
-          </span>
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`transition-transform duration-200 ${data.isExpanded ? 'rotate-90' : ''}`}>
+            <path d="m9 5 7 7-7 7" />
+          </svg>
         </button>
-        <div className="flex items-center gap-1.5 flex-1">
-          <span className="text-base sm:text-lg">📦</span>
-          <span className="font-semibold text-xs sm:text-sm text-neon-purple">{data.label}</span>
-          <span className="text-[0.65rem] sm:text-xs text-text-secondary font-normal">({data.nodeCount})</span>
+        <div className="flex-1 min-w-0">
+          <span className="block text-xs font-semibold text-neon-purple truncate" title={data.label}>{data.label}</span>
+          <span className="text-[11px] text-text-secondary tabular-nums">{data.nodeCount} definitions</span>
         </div>
       </div>
       <Handle type="source" position={Position.Bottom} className="handle-bottom" />

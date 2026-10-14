@@ -80,6 +80,31 @@ fn test_definition_level_nodes() {
 
     // Should have 4 nodes: 1 Service + 2 Messages + 1 Enum
     assert_eq!(graph.nodes.len(), 4);
+    assert_eq!(
+        graph
+            .nodes
+            .iter()
+            .map(|node| node.id.as_str())
+            .collect::<Vec<_>>(),
+        [
+            "user.v1.GetUserRequest",
+            "user.v1.User",
+            "user.v1.UserStatus",
+            "user.v1.UserService",
+        ]
+    );
+    assert_eq!(
+        graph
+            .edges
+            .iter()
+            .map(|edge| (edge.source.as_str(), edge.target.as_str()))
+            .collect::<Vec<_>>(),
+        [
+            ("user.v1.UserService", "user.v1.GetUserRequest"),
+            ("user.v1.UserService", "user.v1.User"),
+            ("user.v1.User", "user.v1.UserStatus"),
+        ]
+    );
 
     // Check Service node
     let service = graph
@@ -238,4 +263,38 @@ fn test_multiple_services_same_file() {
             .iter()
             .all(|n| n.file == "api/v1/api.proto" && n.node_type == NodeType::Service)
     );
+}
+
+#[test]
+fn analyzer_reuse_does_not_resolve_types_from_an_earlier_snapshot() {
+    let mut analyzer = Analyzer::new();
+    let _ = analyzer.analyze(&FileDescriptorSet {
+        file: vec![FileDescriptorProto {
+            name: Some("old.proto".into()),
+            package: Some("old".into()),
+            message_type: vec![DescriptorProto {
+                name: Some("Gone".into()),
+                ..Default::default()
+            }],
+            ..Default::default()
+        }],
+    });
+    let graph = analyzer.analyze(&FileDescriptorSet {
+        file: vec![FileDescriptorProto {
+            name: Some("new.proto".into()),
+            package: Some("new".into()),
+            message_type: vec![DescriptorProto {
+                name: Some("Current".into()),
+                field: vec![FieldDescriptorProto {
+                    name: Some("stale".into()),
+                    type_name: Some(".old.Gone".into()),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }],
+            ..Default::default()
+        }],
+    });
+    assert_eq!(graph.nodes.len(), 1);
+    assert!(graph.edges.is_empty());
 }

@@ -1,66 +1,40 @@
 import { useCallback } from 'react';
-import dagre from 'dagre';
 import type { Node, Edge } from '@xyflow/react';
-
-const BASE_WIDTH = 200;
-
-/** Estimate node dimensions from data content. */
-function getNodeDimensions(node: Node): { width: number; height: number } {
-  const details = node.data?.details as
-    | { kind: string; methods?: unknown[]; fields?: unknown[]; values?: unknown[] }
-    | undefined;
-
-  if (!details) {
-    return { width: BASE_WIDTH, height: 100 };
-  }
-
-  switch (details.kind) {
-    case 'Service':
-      return { width: BASE_WIDTH, height: 80 + (details.methods?.length ?? 0) * 28 };
-    case 'Message':
-      return { width: BASE_WIDTH, height: 80 + (details.fields?.length ?? 0) * 24 };
-    case 'Enum':
-      return { width: BASE_WIDTH, height: 80 + (details.values?.length ?? 0) * 24 };
-    default:
-      return { width: BASE_WIDTH, height: 100 };
-  }
-}
+import { applyLayoutPositions } from '@/lib/graphView';
 
 export function useAutoLayout() {
-  const getLayoutedNodes = useCallback((
+  const getLayoutedNodes = useCallback(async (
     nodes: Node[],
     edges: Edge[],
-    direction: 'TB' | 'LR' = 'TB'
-  ): Node[] => {
+    direction: 'TB' | 'LR' = 'TB',
+    signal?: AbortSignal,
+  ): Promise<Node[]> => {
+    signal?.throwIfAborted();
+    const { default: dagre } = await import('dagre');
+    // Import itself cannot be aborted; skip obsolete work once the shared chunk arrives.
+    signal?.throwIfAborted();
     const g = new dagre.graphlib.Graph();
     g.setGraph({ rankdir: direction, nodesep: 80, ranksep: 100 });
     g.setDefaultEdgeLabel(() => ({}));
 
-    const dimensionsMap = new Map<string, { width: number; height: number }>();
-
+    // Cards show a compact summary, not every detail field. Match their CSS bounds.
     nodes.forEach((node) => {
-      const dims = getNodeDimensions(node);
-      dimensionsMap.set(node.id, dims);
-      g.setNode(node.id, { width: dims.width, height: dims.height });
+      g.setNode(node.id, node.type === 'package'
+        ? { width: 240, height: 64 }
+        : { width: 220, height: 132 });
     });
-
     edges.forEach((edge) => {
-      g.setEdge(edge.source, edge.target);
+      if (g.hasNode(edge.source) && g.hasNode(edge.target)) {
+        g.setEdge(edge.source, edge.target);
+      }
     });
-
     dagre.layout(g);
 
-    return nodes.map((node) => {
-      const pos = g.node(node.id);
-      const dims = dimensionsMap.get(node.id) ?? { width: BASE_WIDTH, height: 100 };
-      return {
-        ...node,
-        position: {
-          x: pos.x - dims.width / 2,
-          y: pos.y - dims.height / 2,
-        },
-      };
-    });
+    const positions = new Map(nodes.map((node) => {
+      const { x, y, width, height } = g.node(node.id);
+      return [node.id, { x: x - width / 2, y: y - height / 2 }] as const;
+    }));
+    return applyLayoutPositions(nodes, positions);
   }, []);
 
   return { getLayoutedNodes };

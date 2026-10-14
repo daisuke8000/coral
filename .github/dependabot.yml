@@ -26,6 +26,10 @@ updates:
     directory: "/ui"
     schedule:
       interval: "weekly"
+    # Current typescript-eslint supports TS <6.1; revisit when TS 7 is supported.
+    ignore:
+      - dependency-name: "typescript"
+        versions: [">=7.0.0 <8.0.0"]
     groups:
       compatible-updates:
         patterns: ["*"]
