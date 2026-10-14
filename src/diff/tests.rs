@@ -256,3 +256,84 @@ fn enum_renumbering_is_reported() {
         ]
     ));
 }
+
+#[test]
+fn same_id_definition_kind_change_is_removal_and_addition() {
+    let base = create_base_model();
+    let mut head = base.clone();
+    head.nodes[1].node_type = NodeType::Enum;
+    head.nodes[1].details = NodeDetails::Enum { values: vec![] };
+    let diff = DiffReport::compute(&base, &head);
+    assert_eq!(diff.removed.messages.len(), 1);
+    assert_eq!(diff.added.enums.len(), 1);
+    assert_eq!(diff.removed.messages[0].id, "user.v1.User");
+    assert_eq!(diff.added.enums[0].id, "user.v1.User");
+    assert!(diff.modified.is_empty());
+}
+
+#[test]
+fn each_same_name_field_and_rpc_property_is_compared() {
+    let base = create_base_model();
+    for property in 0..3 {
+        let mut head = base.clone();
+        let NodeDetails::Message { fields } = &mut head.nodes[1].details else {
+            panic!()
+        };
+        match property {
+            0 => fields[0].number += 1,
+            1 => fields[0].type_name = "int64".into(),
+            _ => fields[0].label = "repeated".into(),
+        }
+        let diff = DiffReport::compute(&base, &head);
+        assert!(matches!(
+            &diff.modified[0].changes[..],
+            [Change::FieldRemoved { .. }, Change::FieldAdded { .. }]
+        ));
+    }
+    for input in [true, false] {
+        let mut head = base.clone();
+        let NodeDetails::Service { methods, .. } = &mut head.nodes[0].details else {
+            panic!()
+        };
+        if input {
+            methods[0].input_type = "Other".into();
+        } else {
+            methods[0].output_type = "Other".into();
+        }
+        let diff = DiffReport::compute(&base, &head);
+        assert!(matches!(
+            &diff.modified[0].changes[..],
+            [Change::MethodRemoved { .. }, Change::MethodAdded { .. }]
+        ));
+    }
+}
+
+#[test]
+fn field_reordering_is_not_a_schema_change() {
+    let mut base = create_head_model();
+    let mut head = base.clone();
+    let NodeDetails::Message { fields } = &mut head.nodes[1].details else {
+        panic!()
+    };
+    fields.reverse();
+    assert!(!DiffReport::compute(&base, &head).has_changes());
+    // A larger definition also exercises the indexed (not per-item scan) path.
+    let NodeDetails::Message { fields } = &mut base.nodes[1].details else {
+        panic!()
+    };
+    fields.extend((0..4096).map(|i| FieldInfo {
+        name: format!("field_{i:04}"),
+        number: i + 10,
+        type_name: "string".into(),
+        label: "optional".into(),
+    }));
+    head = base.clone();
+    let NodeDetails::Message { fields } = &mut head.nodes[1].details else {
+        panic!()
+    };
+    for field in fields {
+        field.type_name = "bytes".into();
+    }
+    let diff = DiffReport::compute(&base, &head);
+    assert_eq!(diff.modified[0].changes.len(), 2 * 4098);
+}

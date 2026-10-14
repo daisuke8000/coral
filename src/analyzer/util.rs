@@ -2,6 +2,7 @@
 
 use std::collections::BTreeMap;
 
+use prost_types::DescriptorProto;
 use prost_types::field_descriptor_proto::{Label, Type};
 
 use crate::domain::{Node, Package};
@@ -29,10 +30,51 @@ pub(crate) fn generate_fq_type(package: &str, name: &str) -> String {
     }
 }
 
-/// `".user.v1.GetUserRequest"` -> `"GetUserRequest"`.
-pub(crate) fn extract_short_type(full_type: Option<&String>) -> String {
+/// Visit nested messages without recursion or silent depth truncation.
+pub(crate) fn scoped_messages(
+    messages: &[DescriptorProto],
+) -> impl Iterator<Item = (&DescriptorProto, String)> + '_ {
+    let mut pending: Vec<_> = messages
+        .iter()
+        .rev()
+        .map(|message| (message, String::new()))
+        .collect();
+    std::iter::from_fn(move || {
+        while let Some((message, parent)) = pending.pop() {
+            let Some(name) = message.name.as_deref() else {
+                continue;
+            };
+            let scoped_name = generate_node_id(&parent, name);
+            pending.extend(
+                message
+                    .nested_type
+                    .iter()
+                    .rev()
+                    .map(|nested| (nested, scoped_name.clone())),
+            );
+            return Some((message, scoped_name));
+        }
+        None
+    })
+}
+
+/// Keep local names concise, but retain scopes and foreign package identity.
+pub(crate) fn display_type(full_type: Option<&String>, package: &str) -> String {
+    let prefix = if package.is_empty() {
+        ".".to_string()
+    } else {
+        format!(".{package}.")
+    };
     full_type
-        .map(|t| t.rsplit('.').next().unwrap_or(t).to_string())
+        .map(|t| {
+            // With no package, stripping the dot from a foreign type would make
+            // it indistinguishable from a local nested name.
+            if package.is_empty() && t.trim_start_matches('.').contains('.') {
+                t.clone()
+            } else {
+                t.strip_prefix(prefix.as_str()).unwrap_or(t).to_string()
+            }
+        })
         .unwrap_or_default()
 }
 
@@ -48,9 +90,13 @@ pub(crate) fn label_to_string(label: Option<i32>) -> String {
         .to_string()
 }
 
-pub(crate) fn type_to_string(field_type: Option<i32>, type_name: Option<&String>) -> String {
+pub(crate) fn type_to_string(
+    field_type: Option<i32>,
+    type_name: Option<&String>,
+    package: &str,
+) -> String {
     if let Some(name) = type_name.filter(|n| !n.is_empty()) {
-        return extract_short_type(Some(name));
+        return display_type(Some(name), package);
     }
 
     field_type

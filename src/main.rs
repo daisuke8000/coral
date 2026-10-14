@@ -137,14 +137,27 @@ mod tests {
                 .as_nanos()
         ));
         let file = std::fs::File::create_new(&path).unwrap();
+        file.set_len(MAX_DIFF_JSON_BYTES).unwrap();
+        let boundary = read_diff_json(&path);
         file.set_len(MAX_DIFF_JSON_BYTES + 1).unwrap();
-        let result = read_diff_json(&path);
+        let oversized = read_diff_json(&path);
+        std::fs::write(&path, "héllo").unwrap();
+        let utf8 = read_diff_json(&path);
+        std::fs::write(&path, [0xff]).unwrap();
+        let invalid_utf8 = read_diff_json(&path);
+        std::fs::write(&path, b"").unwrap();
+        let empty = read_diff_json(&path);
+        drop(file);
         std::fs::remove_file(&path).unwrap();
+        assert_eq!(boundary.unwrap().len() as u64, MAX_DIFF_JSON_BYTES);
         assert!(
-            result
+            oversized
                 .unwrap_err()
                 .to_string()
                 .contains("diff input exceeds")
         );
+        assert_eq!(utf8.unwrap(), "héllo");
+        assert!(invalid_utf8.is_err());
+        assert_eq!(empty.unwrap(), "");
     }
 }

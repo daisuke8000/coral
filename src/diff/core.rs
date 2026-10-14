@@ -77,15 +77,33 @@ impl DiffReport {
         let base_ids: HashSet<&str> = base_nodes.keys().copied().collect();
         let head_ids: HashSet<&str> = head_nodes.keys().copied().collect();
 
-        let added = Self::collect_diff_items(head_ids.difference(&base_ids).copied(), &head_nodes);
-        let removed =
-            Self::collect_diff_items(base_ids.difference(&head_ids).copied(), &base_nodes);
+        // Replacing a message with an enum/service at the same ID is a removal
+        // plus addition, not an unchanged node or an unrepresentable modification.
+        let added = Self::collect_diff_items(
+            head_ids.iter().copied().filter(|id| {
+                base_nodes
+                    .get(id)
+                    .is_none_or(|base| base.node_type != head_nodes[id].node_type)
+            }),
+            &head_nodes,
+        );
+        let removed = Self::collect_diff_items(
+            base_ids.iter().copied().filter(|id| {
+                head_nodes
+                    .get(id)
+                    .is_none_or(|head| head.node_type != base_nodes[id].node_type)
+            }),
+            &base_nodes,
+        );
 
         let mut modified: Vec<ModifiedItem> = base_ids
             .intersection(&head_ids)
             .filter_map(|id| {
                 let base_node = base_nodes.get(id)?;
                 let head_node = head_nodes.get(id)?;
+                if base_node.node_type != head_node.node_type {
+                    return None;
+                }
                 Self::compute_node_changes(base_node, head_node)
             })
             .collect();

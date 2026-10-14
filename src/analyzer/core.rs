@@ -1,10 +1,10 @@
 //! Core Analyzer: orchestrates FileDescriptorSet → GraphModel conversion.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use prost_types::FileDescriptorSet;
 
-use crate::domain::{GraphModel, MessageDef};
+use crate::domain::{GraphModel, MessageDef, Node, NodeDetails, NodeType};
 
 use super::util;
 
@@ -16,8 +16,8 @@ pub struct Analyzer {
     pub(super) type_to_node_id: HashMap<String, String>,
     /// Maps fully-qualified type name to MessageDef for expandable RPC method fields
     pub(super) type_to_message_def: HashMap<String, MessageDef>,
-    /// Tracks external packages (google.*, buf.*) for External node creation
-    pub(super) external_packages: HashSet<String>,
+    /// External definitions, materialized only when referenced by an edge.
+    pub(super) external_nodes: HashMap<String, Node>,
 }
 
 impl Analyzer {
@@ -26,7 +26,7 @@ impl Analyzer {
         Self {
             type_to_node_id: HashMap::new(),
             type_to_message_def: HashMap::new(),
-            external_packages: HashSet::new(),
+            external_nodes: HashMap::new(),
         }
     }
 
@@ -34,7 +34,7 @@ impl Analyzer {
     pub fn analyze(&mut self, fds: &FileDescriptorSet) -> GraphModel {
         self.type_to_node_id.clear();
         self.type_to_message_def.clear();
-        self.external_packages.clear();
+        self.external_nodes.clear();
         let mut model = GraphModel::default();
 
         // First pass: Create Message/Enum nodes and build type mappings
@@ -44,21 +44,25 @@ impl Analyzer {
             let package = file.package.as_deref().unwrap_or("");
             let is_external = util::is_external_file(file_name);
 
-            // Create Message nodes (skip external files - just track their types)
-            for message in &file.message_type {
-                if is_external {
-                    self.register_external_type(message, package);
-                } else if let Some(node) = self.create_message_node(message, package, file_name) {
-                    model.nodes.push(node);
+            // Every registered nested type also gets a definition node.
+            for (message, scoped_name) in util::scoped_messages(&file.message_type) {
+                if let Some(node) =
+                    self.create_message_node(message, package, file_name, &scoped_name)
+                {
+                    self.add_definition(node, is_external, &mut model);
+                }
+                for enum_type in &message.enum_type {
+                    if let Some(node) =
+                        self.create_enum_node(enum_type, package, file_name, &scoped_name)
+                    {
+                        self.add_definition(node, is_external, &mut model);
+                    }
                 }
             }
 
-            // Create Enum nodes (skip external files - just track their types)
             for enum_type in &file.enum_type {
-                if is_external {
-                    self.register_external_enum(enum_type, package);
-                } else if let Some(node) = self.create_enum_node(enum_type, package, file_name) {
-                    model.nodes.push(node);
+                if let Some(node) = self.create_enum_node(enum_type, package, file_name, "") {
+                    self.add_definition(node, is_external, &mut model);
                 }
             }
         }
@@ -66,6 +70,9 @@ impl Analyzer {
         // Second pass: Create Service nodes (now message definitions are available)
         for file in &fds.file {
             let file_name = file.name.as_deref().unwrap_or("");
+            if util::is_external_file(file_name) {
+                continue;
+            }
             let package = file.package.as_deref().unwrap_or("");
 
             for service in &file.service {
@@ -91,19 +98,37 @@ impl Analyzer {
                     .extend(self.create_service_edges(service, package));
             }
 
-            // Edges from Message fields
-            for message in &file.message_type {
+            // Use the same scoped traversal for nested field dependencies.
+            for (message, scoped_name) in util::scoped_messages(&file.message_type) {
                 model
                     .edges
-                    .extend(self.create_message_edges(message, package, &mut model.nodes));
+                    .extend(self.create_message_edges(message, package, &scoped_name));
             }
         }
 
         // Deduplicate edges
         model.edges = Self::deduplicate_edges(model.edges);
 
+        // Hash lookups avoid a node-vector scan for every external reference,
+        // including RPC-only references. Removal ensures one node per type.
+        for edge in &model.edges {
+            if let Some(node) = self.external_nodes.remove(&edge.target) {
+                model.nodes.push(node);
+            }
+        }
+
         model.packages = util::group_packages(&model.nodes);
         model
+    }
+
+    fn add_definition(&mut self, mut node: Node, is_external: bool, model: &mut GraphModel) {
+        if is_external {
+            node.node_type = NodeType::External;
+            node.details = NodeDetails::External;
+            self.external_nodes.insert(node.id.clone(), node);
+        } else {
+            model.nodes.push(node);
+        }
     }
 }
 

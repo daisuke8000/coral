@@ -8,4 +8,6 @@ mod util;
 pub use self::core::Analyzer;
 
 #[cfg(test)]
+mod regression_tests;
+#[cfg(test)]
 mod tests;
