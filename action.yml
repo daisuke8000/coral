@@ -197,15 +197,15 @@ runs:
         mkdir -p "${WORKSPACE}/coral-output"
         cd "$PROTO_PATH"
 
+        DESCRIPTOR="$(mktemp "${RUNNER_TEMP}/coral-descriptor.XXXXXX")"
+        trap 'rm -f "$DESCRIPTOR"' EXIT
+        BUF_ARGS=()
         if [ -n "$BUF_CONFIG" ]; then
-          buf build --config "$BUF_CONFIG" -o - | "$CORAL_BIN" --output json > \
-            "${WORKSPACE}/coral-output/graph.json"
-          MARKDOWN=$(buf build --config "$BUF_CONFIG" -o - | "$CORAL_BIN" --output markdown)
-        else
-          buf build -o - | "$CORAL_BIN" --output json > \
-            "${WORKSPACE}/coral-output/graph.json"
-          MARKDOWN=$(buf build -o - | "$CORAL_BIN" --output markdown)
+          BUF_ARGS+=(--config "$BUF_CONFIG")
         fi
+        buf build "${BUF_ARGS[@]}" -o - > "$DESCRIPTOR"
+        "$CORAL_BIN" --output json < "$DESCRIPTOR" > "${WORKSPACE}/coral-output/graph.json"
+        MARKDOWN=$("$CORAL_BIN" --output markdown < "$DESCRIPTOR")
 
         echo "json-path=coral-output/graph.json" >> "$GITHUB_OUTPUT"
         DELIMITER="$(openssl rand -hex 16)"
@@ -322,18 +322,14 @@ runs:
       if: inputs.comment-on-pr == 'true' && github.event_name == 'pull_request'
       uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3  # v9.0.0
       env:
-        MARKDOWN_REPORT: ${{ steps.generate.outputs.markdown-report }}
         DIFF_REPORT: ${{ steps.diff.outputs.diff-report }}
       with:
         github-token: ${{ inputs.github-token || github.token }}
         script: |
-          const markdownReport = process.env.MARKDOWN_REPORT || '';
           const diffReport = process.env.DIFF_REPORT || '';
 
-          let body = '';
-
           // Show only diff report for PR comments
-          body = '## 🪸 Coral Proto Dependency Analysis\n\n' + (diffReport.trim() || '### No Changes Detected\n\nNo proto schema changes in this PR.');
+          const body = '## 🪸 Coral Proto Dependency Analysis\n\n' + (diffReport.trim() || '### No Changes Detected\n\nNo proto schema changes in this PR.');
 
           const { data: comments } = await github.rest.issues.listComments({
             owner: context.repo.owner,
