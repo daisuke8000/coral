@@ -7,11 +7,11 @@ function App() {
   const { data, loading, error, refetch } = useGraphData();
 
   return (
-    <div className="flex flex-col h-screen bg-bg-dark text-text-primary">
+    <div className="flex flex-col h-full min-w-0 bg-bg-dark text-text-primary">
       {/* Header */}
-      <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 sm:p-4 md:px-6 gap-3 bg-bg-secondary border-b border-white/10">
+      <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 sm:p-4 md:px-6 gap-3 bg-bg-secondary border-b border-border-subtle shrink-0">
         <div className="flex items-center">
-          <h1 className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-neon-magenta to-neon-cyan bg-clip-text text-transparent">
+          <h1 className="text-xl font-semibold tracking-tight bg-gradient-to-r from-neon-magenta to-neon-cyan bg-clip-text text-transparent">
             🪸 Coral
           </h1>
           <span className="text-xs sm:text-sm text-text-secondary ml-3 sm:ml-4 hidden xs:inline">
@@ -30,7 +30,7 @@ function App() {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1">
+      <main className="flex-1 min-h-0 min-w-0">
         {loading && (
           <div className="flex flex-col items-center justify-center h-full gap-4">
             <div className="w-12 h-12 border-[3px] border-white/10 border-t-neon-cyan rounded-full animate-spin" />

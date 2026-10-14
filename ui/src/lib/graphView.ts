@@ -1,6 +1,26 @@
 import type { Node, Edge } from '@xyflow/react';
-import type { GraphData, NodeData } from '../types/graph.ts';
+import type { GraphData, NodeData, Package } from '../types/graph.ts';
 import type { PackageNodeData } from '../components/nodes/PackageGroupNode.tsx';
+
+interface GraphViewEdgeData extends Record<string, unknown> {
+  kind: 'membership' | 'dependency';
+  definitionIds: Set<string>;
+}
+
+export type GraphViewEdge = Edge<GraphViewEdgeData>;
+
+export function filterPackages(packages: Package[], query: string): Package[] {
+  const term = query.trim().toLowerCase();
+  return packages.filter((pkg) => `${pkg.id || 'default'} ${pkg.label ?? ''}`.toLowerCase().includes(term));
+}
+
+export function getVisiblePackageIds(packages: Package[], hiddenPackages: Set<string>): Set<string> {
+  return new Set(packages.filter((pkg) => !hiddenPackages.has(pkg.id)).map((pkg) => pkg.id));
+}
+
+export function getExpandedPackageIds(packages: Package[], expandedPackages: Set<string>): Set<string> {
+  return new Set(packages.filter((pkg) => expandedPackages.has(pkg.id)).map((pkg) => pkg.id));
+}
 
 interface CalculateLayoutOptions {
   expandedPackages: Set<string>;
@@ -12,7 +32,7 @@ interface CalculateLayoutOptions {
 export function calculateLayout(
   data: GraphData,
   options: CalculateLayoutOptions
-): { nodes: Node[]; edges: Edge[] } {
+): { nodes: Node[]; edges: GraphViewEdge[] } {
   const { expandedPackages, togglePackage, visiblePackages, nodeToPackageMap } = options;
   const packageMap = new Map<string, typeof data.nodes>();
 
@@ -26,12 +46,12 @@ export function calculateLayout(
 
   const nodes: Node[] = [];
   let packageX = 0;
-  const packageWidth = 300;
-  const nodeHeight = 120;
+  const packageWidth = 240;
+  const nodeHeight = 168;
   const packagePadding = 100;
-  const packageNodeHeight = 60;
+  const packageNodeHeight = 64;
 
-  const parentChildEdges: Edge[] = [];
+  const parentChildEdges: GraphViewEdge[] = [];
 
   packageMap.forEach((packageNodes, packageId) => {
     const isExpanded = expandedPackages.has(packageId);
@@ -49,6 +69,7 @@ export function calculateLayout(
     nodes.push({
       id: pkgNodeId,
       type: 'package',
+      selectable: false,
       position: {
         x: packageX + 50,
         y: 0,
@@ -70,7 +91,7 @@ export function calculateLayout(
           type: node.type,
           position: {
             x: 0,
-            y: (nodeIndex + 1) * nodeHeight + packageNodeHeight,
+            y: packageNodeHeight + 56 + nodeIndex * nodeHeight,
           },
           data: nodeData,
           parentId: pkgNodeId,
@@ -81,7 +102,8 @@ export function calculateLayout(
           source: pkgNodeId,
           target: node.id,
           type: 'smoothstep',
-          style: { stroke: 'rgba(128, 128, 255, 0.4)', strokeWidth: 1, strokeDasharray: '4 2' },
+          data: { kind: 'membership', definitionIds: new Set([node.id]) },
+          style: { stroke: 'var(--color-neon-purple)', strokeOpacity: 0.4, strokeWidth: 1, strokeDasharray: '4 2' },
         });
       });
     }
@@ -90,10 +112,10 @@ export function calculateLayout(
   });
 
   // Create edges with smart routing (filter by visible packages)
-  const edgeSet = new Set<string>();
-  const edges: Edge[] = [];
+  const edgeMap = new Map<string, GraphViewEdge>();
+  const edges: GraphViewEdge[] = [];
 
-  data.edges.forEach((edge, index) => {
+  data.edges.forEach((edge) => {
     const sourcePackage = nodeToPackageMap.get(edge.source);
     const targetPackage = nodeToPackageMap.get(edge.target);
 
@@ -111,20 +133,45 @@ export function calculateLayout(
     // Skip self-loops on package level
     if (actualSource === actualTarget) return;
 
-    // Deduplicate edges
-    const edgeKey = `${actualSource}->${actualTarget}`;
-    if (edgeSet.has(edgeKey)) return;
-    edgeSet.add(edgeKey);
+    // Retain every underlying endpoint so collapsed routes still highlight correctly.
+    const edgeKey = JSON.stringify([actualSource, actualTarget]);
+    const existing = edgeMap.get(edgeKey);
+    if (existing) {
+      existing.data?.definitionIds.add(edge.source);
+      existing.data?.definitionIds.add(edge.target);
+      return;
+    }
 
-    edges.push({
-      id: `edge-${index}-${edgeKey}`,
+    const routedEdge: GraphViewEdge = {
+      id: `edge-${edgeKey}`,
       source: actualSource,
       target: actualTarget,
-      animated: false,
-      style: { stroke: 'rgba(255, 255, 255, 0.4)', strokeWidth: 2 },
-    });
+      data: { kind: 'dependency', definitionIds: new Set([edge.source, edge.target]) },
+      animated: true,
+      style: { stroke: 'var(--color-neon-cyan)', strokeOpacity: 0.55, strokeWidth: 2 },
+    };
+    edgeMap.set(edgeKey, routedEdge);
+    edges.push(routedEdge);
   });
 
   return { nodes, edges: [...parentChildEdges, ...edges] };
+}
+
+/** Keep the same parent coordinate system in both layouts to avoid reparenting jumps. */
+export function applyLayoutPositions(
+  nodes: Node[],
+  positions: Map<string, { x: number; y: number }>
+): Node[] {
+  return nodes.map((node) => {
+    const position = positions.get(node.id);
+    if (!position) return node;
+    const parent = node.parentId ? positions.get(node.parentId) : undefined;
+    return {
+      ...node,
+      position: parent
+        ? { x: position.x - parent.x, y: position.y - parent.y }
+        : position,
+    };
+  });
 }
 

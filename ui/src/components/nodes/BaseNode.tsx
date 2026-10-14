@@ -20,12 +20,12 @@ export const BaseNode = memo(function BaseNode({
   children
 }: BaseNodeProps) {
   return (
-    <div className={`rounded-xl p-3 sm:p-4 min-w-[140px] sm:min-w-[180px] transition-all duration-300 hover:scale-[1.02] ${className}`}>
+    <div className={`graph-node rounded-xl transition-transform duration-300 hover:scale-[1.02] ${className}`}>
       <Handle type="target" position={Position.Top} className="handle-top" />
-      <div className="text-center">
-        <div className="text-xl sm:text-2xl mb-1 sm:mb-2">{icon}</div>
-        <div className="font-semibold text-sm sm:text-base mb-1 break-words">{data.label}</div>
-        <div className="text-[0.65rem] sm:text-xs text-text-secondary break-all max-sm:hidden">{data.file}</div>
+      <div className="text-left min-w-0">
+        <div className="node-kind"><span aria-hidden="true">{icon}</span>{data.nodeType}</div>
+        <div className="node-label" title={data.label}>{data.label}</div>
+        <div className="node-file" title={data.file}>{data.file}</div>
         {children}
       </div>
       <Handle type="source" position={Position.Bottom} className="handle-bottom" />

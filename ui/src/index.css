@@ -8,7 +8,11 @@
   --color-neon-purple: #8080ff;
   --color-bg-dark: #0a0a0f;
   --color-bg-secondary: #141420;
-  --color-text-primary: #ffffff;
+  --color-surface-raised: #1b1b2b;
+  --color-border-subtle: #2d2d40;
+  --color-border-strong: #47475e;
+  --color-text-muted: #9696af;
+  --color-text-primary: #f4f4fa;
   --color-text-secondary: rgba(255, 255, 255, 0.7);
   --breakpoint-xs: 480px;
   --animate-pulse-magenta: pulse-magenta 3s ease-in-out infinite;
@@ -25,10 +29,14 @@
   body {
     @apply bg-bg-dark text-text-primary overflow-hidden;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    min-height: 100vh;
+    margin: 0;
+    min-height: 100dvh;
+    -webkit-font-smoothing: antialiased;
   }
   #root {
-    @apply w-screen h-screen;
+    width: 100%;
+    height: 100dvh;
+    min-width: 0;
   }
 }
 
@@ -71,13 +79,20 @@
   to { stroke-dashoffset: -10; }
 }
 
+@keyframes node-arrive {
+  from { opacity: 0; transform: translateY(-16px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Newly expanded definitions arrive gently while retaining their original pulses. */
+.service-node { animation: pulse-magenta 3s ease-in-out infinite, node-arrive 0.5s ease-out; }
+.message-node { animation: pulse-cyan 4s ease-in-out infinite, node-arrive 0.5s ease-out; }
+.enum-node { animation: pulse-yellow 4s ease-in-out infinite, node-arrive 0.5s ease-out; }
+.external-node { animation: node-arrive 0.5s ease-out; }
+
 /* React Flow overrides */
 .neon-flow .react-flow__background {
   background-color: var(--color-bg-dark) !important;
-}
-
-.neon-flow .react-flow__edge-path {
-  /* Edge emphasis comes from each edge's inline style. */
 }
 
 .neon-flow .react-flow__edge.animated path {
@@ -87,7 +102,7 @@
 
 .neon-controls {
   background: var(--color-bg-secondary) !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border: 1px solid var(--color-border-subtle) !important;
   border-radius: 8px !important;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4) !important;
 }
@@ -108,12 +123,12 @@
 
 .neon-minimap {
   background: var(--color-bg-secondary) !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border: 1px solid var(--color-border-subtle) !important;
   border-radius: 8px !important;
 }
 
 .react-flow__node {
-  transition: transform 0.5s ease-out !important;
+  transition: transform 0.5s ease-out, opacity 0.3s ease !important;
 }
 
 .react-flow__node.dragging {
@@ -122,7 +137,6 @@
 
 .neon-flow .react-flow__node.dimmed {
   opacity: 0.3;
-  transition: opacity 0.3s ease;
 }
 
 .neon-flow .react-flow__node.dimmed .service-node,
@@ -174,16 +188,11 @@
 .table-scroll::-webkit-scrollbar { height: 4px; }
 .table-scroll::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.2); border-radius: 2px; }
 
-.service-node,
-.message-node,
-.enum-node {
-  will-change: box-shadow, opacity;
-}
-
 @media (prefers-reduced-motion: reduce) {
   .service-node,
   .message-node,
   .enum-node,
+  .external-node,
   .package-group-node {
     animation: none !important;
   }
@@ -195,51 +204,165 @@
   }
 }
 
-/* Mobile: disable expensive animations, keep static neon glow */
-@media (max-width: 640px) {
-  .service-node,
-  .message-node,
-  .enum-node,
-  .external-node,
-  .package-group-node {
-    animation: none !important;
-    will-change: auto !important;
-    transition: none !important;
-  }
-
-  .service-node {
-    box-shadow: 0 0 10px var(--color-neon-magenta) !important;
-  }
-  .message-node {
-    box-shadow: 0 0 10px var(--color-neon-cyan) !important;
-  }
-  .enum-node {
-    box-shadow: 0 0 10px var(--color-neon-yellow) !important;
-  }
-
-  .neon-flow .react-flow__edge.animated path {
-    animation: none !important;
-  }
-
-  .service-node:hover,
-  .message-node:hover,
-  .enum-node:hover,
-  .external-node:hover,
-  .package-group-node:hover {
-    transform: none !important;
-  }
-}
-
-/* Static glow avoids continuous paint work until motion is explicitly enabled. */
+/* Motion stays on at every viewport; quiet mode is an explicit user choice. */
 .quiet-flow .service-node,
 .quiet-flow .message-node,
-.quiet-flow .enum-node {
+.quiet-flow .enum-node,
+.quiet-flow .external-node {
   animation: none;
-  will-change: auto;
 }
 
-.neon-flow button:focus-visible,
+.quiet-flow .react-flow__node {
+  transition: opacity 0.3s ease !important;
+}
+
+:where(button, input, [tabindex]):focus-visible,
+.workbench-button:focus-visible,
+.package-toggle:focus-visible,
+.neon-controls button:focus-visible,
 .package-filter-label:focus-within {
   outline: 2px solid var(--color-neon-cyan);
   outline-offset: 3px;
+}
+
+.workbench-button {
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 8px;
+  background: var(--color-bg-secondary);
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.25;
+  white-space: nowrap;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
+}
+
+.workbench-button:hover:not(:disabled) {
+  background: var(--color-surface-raised);
+  border-color: var(--color-border-strong);
+  color: var(--color-text-primary);
+}
+
+.workbench-button:active:not(:disabled) { background: var(--color-border-subtle); }
+.workbench-button:disabled { opacity: 0.4; cursor: not-allowed; }
+.workbench-button[aria-pressed="true"],
+.workbench-button[aria-expanded="true"],
+.workbench-button-primary {
+  border-color: color-mix(in srgb, var(--color-neon-cyan) 35%, transparent);
+  background: color-mix(in srgb, var(--color-neon-cyan) 7%, var(--color-bg-secondary));
+  color: var(--color-neon-cyan);
+}
+
+.graph-toolbar.react-flow__panel {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  max-width: calc(100% - 24px);
+  margin: 12px;
+  padding: 6px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 12px;
+  background: var(--color-bg-dark);
+  box-shadow: 0 6px 24px rgb(0 0 0 / 25%);
+}
+
+.graph-node { width: 220px; height: 132px; padding: 14px; }
+.node-kind {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.node-label {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+}
+.node-file {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  color: var(--color-text-muted);
+  margin-top: 8px;
+}
+.package-group-node {
+  width: 240px;
+  height: 64px;
+  padding: 8px;
+  border: 1px solid var(--color-neon-purple);
+  background: color-mix(in srgb, var(--color-neon-purple) 10%, var(--color-bg-dark));
+  box-shadow: 0 0 12px rgb(128 128 255 / 25%);
+}
+.package-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 7px;
+  color: var(--color-neon-purple);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.package-toggle:hover { background: rgb(128 128 255 / 15%); }
+.neon-flow .react-flow__node.selected .graph-node,
+.neon-flow .react-flow__node:focus-visible .graph-node {
+  outline: 2px solid var(--color-text-primary);
+  outline-offset: 4px;
+}
+
+.workbench-panel {
+  background: var(--color-bg-secondary);
+  border-color: var(--color-border-subtle);
+  box-shadow: 0 12px 40px rgb(0 0 0 / 40%);
+  overscroll-behavior: contain;
+}
+.panel-header { background: var(--color-bg-secondary); border-color: var(--color-border-subtle); }
+.panel-eyebrow {
+  color: var(--color-text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.panel-close { flex-shrink: 0; }
+.detail-panel table { line-height: 1.6; }
+.detail-panel th { font-size: 10px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; }
+.detail-panel td { vertical-align: top; }
+.detail-panel table, .detail-panel .rpc-method { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.detail-panel .type-link { max-width: 100%; overflow-wrap: anywhere; text-align: left; }
+.detail-panel[data-node-type="service"] .panel-eyebrow { color: var(--color-neon-magenta); }
+.detail-panel[data-node-type="message"] .panel-eyebrow { color: var(--color-neon-cyan); }
+.detail-panel[data-node-type="enum"] .panel-eyebrow { color: var(--color-neon-yellow); }
+.graph-empty { display: flex; align-items: center; gap: 12px; max-width: calc(100% - 96px); padding: 10px; border-radius: 12px; background: var(--color-bg-secondary); border: 1px solid var(--color-border-subtle); }
+
+@media (max-width: 639px) {
+  .graph-toolbar.react-flow__panel {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: calc(100% - 16px);
+    max-width: none;
+    margin: 8px;
+  }
+  .graph-toolbar .workbench-button { padding-inline: 6px; font-size: 11px; }
+  .workbench-panel { padding-bottom: env(safe-area-inset-bottom); }
+  .graph-empty { flex-direction: column; gap: 6px; text-align: center; }
 }

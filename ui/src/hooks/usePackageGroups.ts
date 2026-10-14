@@ -1,5 +1,6 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import type { GraphData } from '@/types/graph';
+import { getExpandedPackageIds } from '@/lib/graphView';
 
 interface UsePackageGroupsReturn {
   /** Set of currently expanded package IDs */
@@ -18,8 +19,10 @@ interface UsePackageGroupsReturn {
 
 export function usePackageGroups(data: GraphData): UsePackageGroupsReturn {
   // Start with all packages collapsed
-  const [expandedPackages, setExpandedPackages] = useState<Set<string>>(
-    new Set()
+  const [expandedIds, setExpandedPackages] = useState<Set<string>>(new Set());
+  const expandedPackages = useMemo(
+    () => getExpandedPackageIds(data.packages, expandedIds),
+    [data.packages, expandedIds]
   );
 
   const togglePackage = useCallback((packageId: string) => {
