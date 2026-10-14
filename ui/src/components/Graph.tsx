@@ -11,6 +11,7 @@ import {
   type NodeTypes,
   type NodeMouseHandler,
   type NodeChange,
+  type ReactFlowInstance,
   BackgroundVariant,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
@@ -22,7 +23,8 @@ import {
   EnumNode,
   PackageGroupNode,
 } from '@/components/nodes';
-import { calculateLayout } from '@/lib/graphView';
+import { calculateLayout, type GraphViewEdge } from '@/lib/graphView';
+import { scheduleLayoutFit, type LayoutFit } from '@/lib/layoutViewport';
 import { styleGraphEdge } from '@/lib/graphSelection';
 import { DetailPanel } from '@/components/DetailPanel';
 import { PackageFilterPanel } from '@/components/PackageFilterPanel';
@@ -93,6 +95,26 @@ export function Graph({ data }: GraphProps) {
   const [motionEnabled, setMotionEnabled] = useState(true);
   const filterButtonRef = useRef<HTMLButtonElement>(null);
   const workbenchRef = useRef<HTMLDivElement>(null);
+  const flowRef = useRef<ReactFlowInstance<Node, GraphViewEdge> | null>(null);
+  const fitRequestedFor = useRef<GraphData | null>(null);
+  const fitRef = useRef<LayoutFit | null>(null);
+  const layoutControllerRef = useRef<AbortController | null>(null);
+  const fitDurationRef = useRef(500);
+  const [reducedMotion, setReducedMotion] = useState(() =>
+    typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  );
+
+  useEffect(() => {
+    const preference = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const update = () => setReducedMotion(preference.matches);
+    preference.addEventListener('change', update);
+    return () => preference.removeEventListener('change', update);
+  }, []);
+
+  useEffect(() => {
+    fitDurationRef.current = motionEnabled && !reducedMotion ? 500 : 0;
+    if (fitDurationRef.current === 0) fitRef.current?.finishWithoutMotion();
+  }, [motionEnabled, reducedMotion]);
 
   const nodeToPackageMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -119,19 +141,49 @@ export function Graph({ data }: GraphProps) {
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const { getLayoutedNodes } = useAutoLayout();
   const [layoutMode, setLayoutMode] = useState<'flat' | 'auto'>('flat');
+  const [layoutError, setLayoutError] = useState(false);
   const isMobile = useIsMobile();
 
+  const cancelPendingFit = useCallback(() => {
+    fitRef.current?.cancel();
+    fitRef.current = null;
+  }, []);
+
   useEffect(() => {
-    const newNodes = initialNodes;
-    const newEdges = initialEdges;
-    if (layoutMode === 'auto') {
-      const layouted = getLayoutedNodes(newNodes, newEdges, 'TB');
+    const controller = new AbortController();
+    layoutControllerRef.current = controller;
+    let shouldFit = fitRequestedFor.current === data;
+    fitRequestedFor.current = null;
+    // User pan/zoom can cancel framing even while the Dagre chunk is still loading.
+    fitRef.current = { cancel: () => { shouldFit = false; }, finishWithoutMotion: () => {} };
+    const apply = (layouted: Node[]) => {
+      if (controller.signal.aborted) return;
       setNodes(layouted);
+      setEdges(initialEdges);
+      if (shouldFit) {
+        fitRef.current = scheduleLayoutFit(
+          () => flowRef.current, layouted, () => fitDurationRef.current
+        );
+      }
+    };
+    if (layoutMode === 'auto') {
+      void getLayoutedNodes(initialNodes, initialEdges, 'TB', controller.signal).then((layouted) => {
+        if (controller.signal.aborted) return;
+        setLayoutError(false);
+        apply(layouted);
+      }).catch(() => {
+        if (controller.signal.aborted) return;
+        setLayoutError(true);
+        apply(initialNodes);
+      });
     } else {
-      setNodes(newNodes);
+      apply(initialNodes);
     }
-    setEdges(newEdges);
-  }, [initialNodes, initialEdges, setNodes, setEdges, layoutMode, getLayoutedNodes]);
+    return () => {
+      controller.abort();
+      cancelPendingFit();
+    };
+  }, [data, initialNodes, initialEdges, setNodes, setEdges, layoutMode, getLayoutedNodes, cancelPendingFit]);
 
   const highlightedPackages = useMemo(() => new Set(
     data.nodes.filter((node) => isNodeHighlighted(node.id)).map((node) => node.package)
@@ -153,17 +205,24 @@ export function Graph({ data }: GraphProps) {
     [edges, selectedNodeId, highlightedNodeIds, motionEnabled]
   );
 
+  const handleNodeDragStart = useCallback(() => {
+    layoutControllerRef.current?.abort();
+    cancelPendingFit();
+  }, [cancelPendingFit]);
+
   const selectDefinition = useCallback((id: string) => {
     setSelectedNodeId(id);
     if (isMobile) setFilterPanelOpen(false);
   }, [setSelectedNodeId, isMobile]);
 
   const handleNodesChange = useCallback((changes: NodeChange<Node>[]) => {
+    // Includes keyboard node movement, which does not emit onNodeDragStart.
+    if (changes.some((change) => change.type === 'position' && change.dragging !== undefined)) handleNodeDragStart();
     onNodesChange(changes);
     // React Flow's keyboard selection uses node changes rather than a mouse click.
     const selection = changes.find((change) => change.type === 'select' && change.selected);
     if (selection?.type === 'select' && selectableNodeIds.has(selection.id)) selectDefinition(selection.id);
-  }, [onNodesChange, selectableNodeIds, selectDefinition]);
+  }, [onNodesChange, selectableNodeIds, selectDefinition, handleNodeDragStart]);
 
   const onNodeClick: NodeMouseHandler = useCallback(
     (_, node) => {
@@ -188,9 +247,21 @@ export function Graph({ data }: GraphProps) {
     clearSelection();
   }, [clearSelection]);
 
+  const handleExpandAll = useCallback(() => {
+    fitRequestedFor.current = data;
+    expandAll();
+  }, [data, expandAll]);
+
+  const handleCollapseAll = useCallback(() => {
+    fitRequestedFor.current = data;
+    collapseAll();
+  }, [data, collapseAll]);
+
   const handleLayoutToggle = useCallback(() => {
+    fitRequestedFor.current = data;
+    setLayoutError(false);
     setLayoutMode((mode) => mode === 'flat' ? 'auto' : 'flat');
-  }, []);
+  }, [data]);
 
   const handleFilterPanelToggle = useCallback(() => {
     // On narrow screens the two bottom sheets would otherwise cover each other.
@@ -210,6 +281,13 @@ export function Graph({ data }: GraphProps) {
     <div
       ref={workbenchRef}
       className="graph-workbench relative flex-1 w-full h-full min-h-0 overflow-hidden"
+      onPointerDownCapture={(event) => {
+        if ((event.target as Element).closest('.neon-controls, .neon-minimap')) cancelPendingFit();
+      }}
+      onClickCapture={(event) => {
+        // Controls also emit programmatic viewport events when activated by keyboard.
+        if ((event.target as Element).closest('.neon-controls')) cancelPendingFit();
+      }}
       onKeyDown={(event) => {
         if (event.key === 'Escape') {
           handleDetailClose();
@@ -222,6 +300,9 @@ export function Graph({ data }: GraphProps) {
         edges={styledEdges}
         onNodesChange={handleNodesChange}
         onEdgesChange={onEdgesChange}
+        onInit={(instance) => { flowRef.current = instance; }}
+        onMoveStart={(event) => { if (event) cancelPendingFit(); }}
+        onNodeDragStart={handleNodeDragStart}
         nodesConnectable={false}
         onNodeClick={onNodeClick}
         onPaneClick={onPaneClick}
@@ -229,7 +310,7 @@ export function Graph({ data }: GraphProps) {
         fitView
         attributionPosition="bottom-left"
         className={`neon-flow ${motionEnabled ? '' : 'quiet-flow'}`}
-        minZoom={0.1}
+        minZoom={0.01}
         maxZoom={2}
         panOnScroll={true}
         zoomOnPinch={true}
@@ -241,7 +322,7 @@ export function Graph({ data }: GraphProps) {
           size={1}
           color="rgba(255, 255, 255, 0.1)"
         />
-        <Controls className="neon-controls" fitViewOptions={{ duration: motionEnabled ? 500 : 0 }} />
+        <Controls className="neon-controls" fitViewOptions={{ duration: motionEnabled && !reducedMotion ? 500 : 0 }} />
         {/* MiniMap hidden on tablet and below */}
         {!isMobile && (
           <MiniMap
@@ -272,7 +353,7 @@ export function Graph({ data }: GraphProps) {
           </button>
           <button
             className={BUTTON_BASE_STYLES}
-            onClick={expandAll}
+            onClick={handleExpandAll}
             disabled={isAllExpanded}
             title="Expand all packages"
             aria-label="Expand all packages"
@@ -281,7 +362,7 @@ export function Graph({ data }: GraphProps) {
           </button>
           <button
             className={BUTTON_BASE_STYLES}
-            onClick={collapseAll}
+            onClick={handleCollapseAll}
             disabled={isAllCollapsed}
             title="Collapse all packages"
             aria-label="Collapse all packages"
@@ -298,6 +379,11 @@ export function Graph({ data }: GraphProps) {
             {layoutMode === 'flat' ? 'AutoLayout' : 'Flat layout'}
           </button>
         </Panel>
+        {layoutError && layoutMode === 'auto' && visiblePackages.size > 0 && (
+          <Panel position="bottom-center" className="graph-empty" role="status">
+            <p className="text-sm text-text-secondary">AutoLayout unavailable. Flat positions are shown; reload to retry.</p>
+          </Panel>
+        )}
         {visiblePackages.size === 0 && totalPackages > 0 && (
           <Panel position="bottom-center" className="graph-empty">
             <p className="text-sm text-text-secondary">All packages are hidden.</p>

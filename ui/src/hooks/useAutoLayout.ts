@@ -1,14 +1,18 @@
 import { useCallback } from 'react';
-import dagre from 'dagre';
 import type { Node, Edge } from '@xyflow/react';
 import { applyLayoutPositions } from '@/lib/graphView';
 
 export function useAutoLayout() {
-  const getLayoutedNodes = useCallback((
+  const getLayoutedNodes = useCallback(async (
     nodes: Node[],
     edges: Edge[],
-    direction: 'TB' | 'LR' = 'TB'
-  ): Node[] => {
+    direction: 'TB' | 'LR' = 'TB',
+    signal?: AbortSignal,
+  ): Promise<Node[]> => {
+    signal?.throwIfAborted();
+    const { default: dagre } = await import('dagre');
+    // Import itself cannot be aborted; skip obsolete work once the shared chunk arrives.
+    signal?.throwIfAborted();
     const g = new dagre.graphlib.Graph();
     g.setGraph({ rankdir: direction, nodesep: 80, ranksep: 100 });
     g.setDefaultEdgeLabel(() => ({}));
