@@ -9,6 +9,17 @@ interface GraphViewEdgeData extends Record<string, unknown> {
 
 export type GraphViewEdge = Edge<GraphViewEdgeData>;
 
+/** Commit topology immediately without undoing positions chosen by the user. */
+export function reconcileNodes(current: Node[], next: Node[]): Node[] {
+  const previous = new Map(current.map((node) => [node.id, node]));
+  return next.map((node) => {
+    const existing = previous.get(node.id);
+    return existing && existing.type === node.type && existing.parentId === node.parentId
+      ? { ...existing, ...node, position: existing.position }
+      : node;
+  });
+}
+
 export function filterPackages(packages: Package[], query: string): Package[] {
   const term = query.trim().toLowerCase();
   return packages.filter((pkg) => `${pkg.id || 'default'} ${pkg.label ?? ''}`.toLowerCase().includes(term));

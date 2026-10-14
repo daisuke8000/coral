@@ -23,7 +23,7 @@ import {
   EnumNode,
   PackageGroupNode,
 } from '@/components/nodes';
-import { calculateLayout, type GraphViewEdge } from '@/lib/graphView';
+import { calculateLayout, reconcileNodes, type GraphViewEdge } from '@/lib/graphView';
 import { scheduleLayoutFit, type LayoutFit } from '@/lib/layoutViewport';
 import { styleGraphEdge } from '@/lib/graphSelection';
 import { DetailPanel } from '@/components/DetailPanel';
@@ -165,10 +165,11 @@ export function Graph({ data }: GraphProps) {
     fitRequestedFor.current = null;
     // User pan/zoom can cancel framing even while the Dagre chunk is still loading.
     fitRef.current = { cancel: () => { shouldFit = false; }, finishWithoutMotion: () => {} };
+    // Topology is not cancellable: a drag must not discard expansion or filtering.
+    setEdges(initialEdges);
     const apply = (layouted: Node[]) => {
       if (controller.signal.aborted) return;
       setNodes(layouted);
-      setEdges(initialEdges);
       if (shouldFit) {
         fitRef.current = scheduleLayoutFit(
           () => flowRef.current, layouted, () => fitDurationRef.current
@@ -176,6 +177,7 @@ export function Graph({ data }: GraphProps) {
       }
     };
     if (layoutMode === 'auto') {
+      setNodes((current) => reconcileNodes(current, initialNodes));
       void getLayoutedNodes(initialNodes, initialEdges, 'TB', controller.signal).then((layouted) => {
         if (controller.signal.aborted) return;
         setLayoutError(false);
