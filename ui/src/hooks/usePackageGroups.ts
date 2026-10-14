@@ -2,22 +2,7 @@ import { useState, useCallback, useMemo } from 'react';
 import type { GraphData } from '@/types/graph';
 import { getExpandedPackageIds } from '@/lib/graphView';
 
-interface UsePackageGroupsReturn {
-  /** Set of currently expanded package IDs */
-  expandedPackages: Set<string>;
-  /** Toggle a single package's expanded state */
-  togglePackage: (packageId: string) => void;
-  /** Expand all packages */
-  expandAll: () => void;
-  /** Collapse all packages */
-  collapseAll: () => void;
-  /** Count of expanded packages */
-  expandedCount: number;
-  /** Total package count */
-  totalPackages: number;
-}
-
-export function usePackageGroups(data: GraphData): UsePackageGroupsReturn {
+export function usePackageGroups(data: GraphData) {
   // Start with all packages collapsed
   const [expandedIds, setExpandedPackages] = useState<Set<string>>(new Set());
   const expandedPackages = useMemo(
@@ -28,11 +13,7 @@ export function usePackageGroups(data: GraphData): UsePackageGroupsReturn {
   const togglePackage = useCallback((packageId: string) => {
     setExpandedPackages((prev) => {
       const next = new Set(prev);
-      if (next.has(packageId)) {
-        next.delete(packageId);
-      } else {
-        next.add(packageId);
-      }
+      if (!next.delete(packageId)) next.add(packageId);
       return next;
     });
   }, []);

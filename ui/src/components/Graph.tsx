@@ -51,22 +51,14 @@ interface GraphProps {
 }
 
 // MiniMap node color mapping (memoized outside component)
-const getNodeColor = (node: Node): string => {
-  switch (node.type) {
-    case 'service':
-      return NEON_MAGENTA;
-    case 'message':
-      return NEON_CYAN;
-    case 'enum':
-      return NEON_YELLOW;
-    case 'external':
-      return NEON_GRAY;
-    case 'package':
-      return NEON_PURPLE;
-    default:
-      return NEON_WHITE;
-  }
+const nodeColors: Record<string, string> = {
+  service: NEON_MAGENTA,
+  message: NEON_CYAN,
+  enum: NEON_YELLOW,
+  external: NEON_GRAY,
+  package: NEON_PURPLE,
 };
+const getNodeColor = (node: Node): string => nodeColors[node.type ?? ''] ?? NEON_WHITE;
 
 export function Graph({ data }: GraphProps) {
   const {
@@ -110,13 +102,10 @@ export function Graph({ data }: GraphProps) {
     if (fitDurationRef.current === 0) fitRef.current?.finishWithoutMotion();
   }, [motionEnabled, reducedMotion]);
 
-  const nodeToPackageMap = useMemo(() => {
-    const map = new Map<string, string>();
-    data.nodes.forEach((node) => {
-      map.set(node.id, node.package);
-    });
-    return map;
-  }, [data.nodes]);
+  const nodeToPackageMap = useMemo(
+    () => new Map(data.nodes.map((node) => [node.id, node.package])),
+    [data.nodes]
+  );
 
   const { nodes: initialNodes, edges: initialEdges } = useMemo(
     () => calculateLayout(data, { expandedPackages, togglePackage, visiblePackages, nodeToPackageMap }),
@@ -248,19 +237,11 @@ export function Graph({ data }: GraphProps) {
     clearSelection();
   }, [selectedNodeId, clearSelection]);
 
-  const onPaneClick = useCallback(() => {
-    clearSelection();
-  }, [clearSelection]);
-
-  const handleExpandAll = useCallback(() => {
+  const changeAllPackages = useCallback((expanded: boolean) => {
     fitRequestedFor.current = data;
-    expandAll();
-  }, [data, expandAll]);
-
-  const handleCollapseAll = useCallback(() => {
-    fitRequestedFor.current = data;
-    collapseAll();
-  }, [data, collapseAll]);
+    if (expanded) expandAll();
+    else collapseAll();
+  }, [data, expandAll, collapseAll]);
 
   const handleLayoutToggle = useCallback(() => {
     fitRequestedFor.current = data;
@@ -310,7 +291,7 @@ export function Graph({ data }: GraphProps) {
         onNodeDragStart={handleNodeDragStart}
         nodesConnectable={false}
         onNodeClick={onNodeClick}
-        onPaneClick={onPaneClick}
+        onPaneClick={clearSelection}
         nodeTypes={nodeTypes}
         fitView
         attributionPosition="bottom-left"
@@ -356,24 +337,18 @@ export function Graph({ data }: GraphProps) {
           >
             Packages
           </button>
-          <button
-            className={BUTTON_BASE_STYLES}
-            onClick={handleExpandAll}
-            disabled={isAllExpanded}
-            title="Expand all packages"
-            aria-label="Expand all packages"
-          >
-            Expand all
-          </button>
-          <button
-            className={BUTTON_BASE_STYLES}
-            onClick={handleCollapseAll}
-            disabled={isAllCollapsed}
-            title="Collapse all packages"
-            aria-label="Collapse all packages"
-          >
-            Collapse all
-          </button>
+          {[true, false].map((expanded) => (
+            <button
+              key={String(expanded)}
+              className={BUTTON_BASE_STYLES}
+              onClick={() => changeAllPackages(expanded)}
+              disabled={expanded ? isAllExpanded : isAllCollapsed}
+              title={expanded ? 'Expand all packages' : 'Collapse all packages'}
+              aria-label={expanded ? 'Expand all packages' : 'Collapse all packages'}
+            >
+              {expanded ? 'Expand all' : 'Collapse all'}
+            </button>
+          ))}
           <button
             className={BUTTON_BASE_STYLES}
             aria-pressed={layoutMode === 'auto'}

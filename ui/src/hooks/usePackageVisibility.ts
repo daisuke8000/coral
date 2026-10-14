@@ -2,14 +2,9 @@ import { useState, useCallback, useMemo } from 'react';
 import type { GraphData } from '@/types/graph';
 import { getVisiblePackageIds } from '@/lib/graphView';
 
-export interface UsePackageVisibilityReturn {
-  visiblePackages: Set<string>;
-  togglePackageVisibility: (packageId: string) => void;
-  showAllPackages: () => void;
-  hideAllPackages: () => void;
-}
+export type UsePackageVisibilityReturn = ReturnType<typeof usePackageVisibility>;
 
-export function usePackageVisibility(data: GraphData): UsePackageVisibilityReturn {
+export function usePackageVisibility(data: GraphData) {
   // Store exclusions so newly fetched packages are visible by default.
   const [hiddenPackages, setHiddenPackages] = useState<Set<string>>(new Set());
   const visiblePackages = useMemo(
@@ -20,11 +15,7 @@ export function usePackageVisibility(data: GraphData): UsePackageVisibilityRetur
   const togglePackageVisibility = useCallback((packageId: string) => {
     setHiddenPackages((prev) => {
       const next = new Set(prev);
-      if (next.has(packageId)) {
-        next.delete(packageId);
-      } else {
-        next.add(packageId);
-      }
+      if (!next.delete(packageId)) next.add(packageId);
       return next;
     });
   }, []);
