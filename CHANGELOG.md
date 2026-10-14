@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Update reviewed Rust/frontend dependencies and Action pins; align UI builds and Node types on Node.js 26.
+- Share definition cards and field tables while retaining neon styling, RPC expansion, selection, and mobile controls.
+- Simplify analyzer passes/reference lookup and ordered diff indexes; share Markdown rendering without changing report formats.
+- Build the Action's head descriptor once for JSON and Markdown; retain the separate base snapshot and checkout restoration.
+- Document current CLI/static-server workflows, supported protobuf/diff scope, and explicit frontend checks. Defer TypeScript 7 updates until typescript-eslint supports them.
+
+### Fixed
+- Preserve nested definition identities, external descriptor provenance, RPC-only references, package-qualified field displays, and analyzer reuse; remove analyzer depth-32 truncation through iterative traversal.
+- Detect same-name field/RPC changes, enum renumbering and declaration-order changes, and same-ID definition-kind replacements with deterministic diffs.
+- Bound diff JSON reads while reading and count every service in CLI summaries, retaining top-level message/enum counts.
+- Revalidate canonical Action paths after base checkout, including carriage-return/newline rejection before emitting path outputs.
+- Keep only the package filter sheet visible when desktop dual panels resize to mobile; retain search focus and keyboard selection.
+- Load Dagre on demand, guard obsolete layout results, and frame explicit layout changes with cancellable 500 ms camera transitions and reduced-motion support.
+- Commit expansion/filter topology independently of lazy layout completion so dragging during chunk loading cannot leave a stale graph or overwrite manual positions.
+
 ## [0.1.8] - 2026-03-10
 
 ### Changed
@@ -83,7 +99,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 - Prevent script injection via process.env
 
-[Unreleased]: https://github.com/daisuke8000/coral/compare/v0.1.8...HEAD
+[Unreleased]: https://github.com/daisuke8000/coral/compare/v0.2.2...HEAD
 [0.1.8]: https://github.com/daisuke8000/coral/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/daisuke8000/coral/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/daisuke8000/coral/compare/v0.1.5...v0.1.6
