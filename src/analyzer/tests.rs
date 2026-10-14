@@ -80,6 +80,31 @@ fn test_definition_level_nodes() {
 
     // Should have 4 nodes: 1 Service + 2 Messages + 1 Enum
     assert_eq!(graph.nodes.len(), 4);
+    assert_eq!(
+        graph
+            .nodes
+            .iter()
+            .map(|node| node.id.as_str())
+            .collect::<Vec<_>>(),
+        [
+            "user.v1.GetUserRequest",
+            "user.v1.User",
+            "user.v1.UserStatus",
+            "user.v1.UserService",
+        ]
+    );
+    assert_eq!(
+        graph
+            .edges
+            .iter()
+            .map(|edge| (edge.source.as_str(), edge.target.as_str()))
+            .collect::<Vec<_>>(),
+        [
+            ("user.v1.UserService", "user.v1.GetUserRequest"),
+            ("user.v1.UserService", "user.v1.User"),
+            ("user.v1.User", "user.v1.UserStatus"),
+        ]
+    );
 
     // Check Service node
     let service = graph

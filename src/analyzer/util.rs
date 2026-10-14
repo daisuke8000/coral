@@ -21,15 +21,6 @@ pub(crate) fn generate_node_id(package: &str, name: &str) -> String {
     }
 }
 
-/// Generate fully-qualified type name for internal tracking: `.{package}.{name}`.
-pub(crate) fn generate_fq_type(package: &str, name: &str) -> String {
-    if package.is_empty() {
-        format!(".{name}")
-    } else {
-        format!(".{package}.{name}")
-    }
-}
-
 /// Visit nested messages without recursion or silent depth truncation.
 pub(crate) fn scoped_messages(
     messages: &[DescriptorProto],

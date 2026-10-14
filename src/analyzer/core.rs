@@ -11,6 +11,7 @@ use super::util;
 /// Analyzer creates definition-level nodes (Service, Message, Enum) from protobuf descriptors.
 /// Each Service, Message, and Enum definition becomes its own graph node.
 /// Edges are created based on field type references between definitions.
+#[derive(Default)]
 pub struct Analyzer {
     /// Maps fully-qualified type name to node ID (e.g., ".user.v1.User" → "user.v1.User")
     pub(super) type_to_node_id: HashMap<String, String>,
@@ -23,11 +24,7 @@ pub struct Analyzer {
 impl Analyzer {
     #[must_use]
     pub fn new() -> Self {
-        Self {
-            type_to_node_id: HashMap::new(),
-            type_to_message_def: HashMap::new(),
-            external_nodes: HashMap::new(),
-        }
+        Self::default()
     }
 
     #[must_use]
@@ -67,7 +64,7 @@ impl Analyzer {
             }
         }
 
-        // Second pass: Create Service nodes (now message definitions are available)
+        // Second pass: definitions are indexed, so services and all references can resolve.
         for file in &fds.file {
             let file_name = file.name.as_deref().unwrap_or("");
             if util::is_external_file(file_name) {
@@ -77,32 +74,25 @@ impl Analyzer {
 
             for service in &file.service {
                 if let Some(node) = self.create_service_node(service, package, file_name) {
+                    let references = service.method.iter().flat_map(|method| {
+                        [method.input_type.as_ref(), method.output_type.as_ref()]
+                    });
+                    model
+                        .edges
+                        .extend(self.create_edges(&node.id, references.flatten()));
                     model.nodes.push(node);
                 }
-            }
-        }
-
-        // Third pass: Create edges based on field type references
-        for file in &fds.file {
-            let file_name = file.name.as_deref().unwrap_or("");
-            if util::is_external_file(file_name) {
-                continue;
-            }
-
-            let package = file.package.as_deref().unwrap_or("");
-
-            // Edges from Service RPC methods
-            for service in &file.service {
-                model
-                    .edges
-                    .extend(self.create_service_edges(service, package));
             }
 
             // Use the same scoped traversal for nested field dependencies.
             for (message, scoped_name) in util::scoped_messages(&file.message_type) {
-                model
-                    .edges
-                    .extend(self.create_message_edges(message, package, &scoped_name));
+                model.edges.extend(self.create_edges(
+                    &util::generate_node_id(package, &scoped_name),
+                    message
+                        .field
+                        .iter()
+                        .filter_map(|field| field.type_name.as_ref()),
+                ));
             }
         }
 
@@ -129,11 +119,5 @@ impl Analyzer {
         } else {
             model.nodes.push(node);
         }
-    }
-}
-
-impl Default for Analyzer {
-    fn default() -> Self {
-        Self::new()
     }
 }

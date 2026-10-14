@@ -67,7 +67,7 @@ impl Analyzer {
     ) -> Option<Node> {
         message.name.as_ref()?;
         let id = util::generate_node_id(package, name);
-        let fq_type = util::generate_fq_type(package, name);
+        let fq_type = format!(".{id}");
         self.type_to_node_id.insert(fq_type.clone(), id.clone());
 
         let fields: Vec<FieldInfo> = message
@@ -108,7 +108,7 @@ impl Analyzer {
     ) -> Option<Node> {
         let name = util::generate_node_id(parent, enum_type.name.as_deref()?);
         let id = util::generate_node_id(package, &name);
-        let fq_type = util::generate_fq_type(package, &name);
+        let fq_type = format!(".{id}");
         self.type_to_node_id.insert(fq_type, id.clone());
 
         let values = enum_type
