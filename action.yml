@@ -70,11 +70,16 @@ runs:
           echo "::error::version must be a valid semver tag (e.g. v1.2.3)"
           exit 1
         fi
-        WORKSPACE="$(realpath -e "$WORKSPACE")"
+        if [[ "$WORKSPACE" == *$'\r'* || "$WORKSPACE" == *$'\n'* ]]; then
+          echo "::error::Resolved paths must not contain carriage returns or newlines"
+          exit 1
+        fi
+        # NUL-delimited reads preserve trailing newlines so they can be rejected below.
+        IFS= read -r -d '' WORKSPACE < <(realpath -ez "$WORKSPACE")
         if [[ "$INPUT_PROTO_PATH" == /* ]]; then
-          RESOLVED_PROTO_PATH="$(realpath -e "$INPUT_PROTO_PATH" 2>/dev/null || echo "")"
+          IFS= read -r -d '' RESOLVED_PROTO_PATH < <(realpath -ez "$INPUT_PROTO_PATH" 2>/dev/null) || RESOLVED_PROTO_PATH=""
         else
-          RESOLVED_PROTO_PATH="$(realpath -e "${WORKSPACE}/${INPUT_PROTO_PATH}" 2>/dev/null || echo "")"
+          IFS= read -r -d '' RESOLVED_PROTO_PATH < <(realpath -ez "${WORKSPACE}/${INPUT_PROTO_PATH}" 2>/dev/null) || RESOLVED_PROTO_PATH=""
         fi
         if [[ ! -d "$RESOLVED_PROTO_PATH" || ( "$RESOLVED_PROTO_PATH" != "$WORKSPACE" && "$RESOLVED_PROTO_PATH" != "${WORKSPACE%/}/"* ) ]]; then
           echo "::error::proto-path must be within the workspace directory"
@@ -86,12 +91,18 @@ runs:
             echo "::error::buf-config must be a relative path within proto-path"
             exit 1
           fi
-          RESOLVED_BUF_CONFIG="$(realpath -e "${RESOLVED_PROTO_PATH}/${INPUT_BUF_CONFIG}" 2>/dev/null || echo "")"
+          IFS= read -r -d '' RESOLVED_BUF_CONFIG < <(realpath -ez "${RESOLVED_PROTO_PATH}/${INPUT_BUF_CONFIG}" 2>/dev/null) || RESOLVED_BUF_CONFIG=""
           if [[ ! -f "$RESOLVED_BUF_CONFIG" || "$RESOLVED_BUF_CONFIG" != "${RESOLVED_PROTO_PATH%/}/"* ]]; then
             echo "::error::buf-config must resolve within proto-path"
             exit 1
           fi
         fi
+        for RESOLVED_PATH in "$WORKSPACE" "$RESOLVED_PROTO_PATH" "$RESOLVED_BUF_CONFIG"; do
+          if [[ "$RESOLVED_PATH" == *$'\r'* || "$RESOLVED_PATH" == *$'\n'* ]]; then
+            echo "::error::Resolved paths must not contain carriage returns or newlines"
+            exit 1
+          fi
+        done
         echo "proto-path=$RESOLVED_PROTO_PATH" >> "$GITHUB_OUTPUT"
         echo "buf-config=$RESOLVED_BUF_CONFIG" >> "$GITHUB_OUTPUT"
 
@@ -214,7 +225,15 @@ runs:
         BASE_REF: ${{ github.base_ref }}
         WORKSPACE: ${{ github.workspace }}
       run: |
-        WORKSPACE="$(realpath -e "$WORKSPACE")"
+        if [[ "$WORKSPACE" == *$'\r'* || "$WORKSPACE" == *$'\n'* ]]; then
+          echo "::error::Resolved paths must not contain carriage returns or newlines"
+          exit 1
+        fi
+        IFS= read -r -d '' WORKSPACE < <(realpath -ez "$WORKSPACE")
+        if [[ "$WORKSPACE" == *$'\r'* || "$WORKSPACE" == *$'\n'* ]]; then
+          echo "::error::Resolved paths must not contain carriage returns or newlines"
+          exit 1
+        fi
         HEAD_REF=$(git -C "$WORKSPACE" symbolic-ref --quiet --short HEAD || git -C "$WORKSPACE" rev-parse HEAD)
 
         git -C "$WORKSPACE" fetch origin --depth=1 "$BASE_REF"
@@ -223,9 +242,9 @@ runs:
 
         # Resolve the original inputs again: base checkout may change symlink targets.
         if [[ "$PROTO_PATH" == /* ]]; then
-          PROTO_PATH="$(realpath -e "$PROTO_PATH" 2>/dev/null || echo "")"
+          IFS= read -r -d '' PROTO_PATH < <(realpath -ez "$PROTO_PATH" 2>/dev/null) || PROTO_PATH=""
         else
-          PROTO_PATH="$(realpath -e "${WORKSPACE}/${PROTO_PATH}" 2>/dev/null || echo "")"
+          IFS= read -r -d '' PROTO_PATH < <(realpath -ez "${WORKSPACE}/${PROTO_PATH}" 2>/dev/null) || PROTO_PATH=""
         fi
         if [[ ! -d "$PROTO_PATH" || ( "$PROTO_PATH" != "$WORKSPACE" && "$PROTO_PATH" != "${WORKSPACE%/}/"* ) ]]; then
           echo "::error::base proto-path must be within the workspace directory"
@@ -236,12 +255,18 @@ runs:
             echo "::error::buf-config must be a relative path within proto-path"
             exit 1
           fi
-          BUF_CONFIG="$(realpath -e "${PROTO_PATH}/${BUF_CONFIG}" 2>/dev/null || echo "")"
+          IFS= read -r -d '' BUF_CONFIG < <(realpath -ez "${PROTO_PATH}/${BUF_CONFIG}" 2>/dev/null) || BUF_CONFIG=""
           if [[ ! -f "$BUF_CONFIG" || "$BUF_CONFIG" != "${PROTO_PATH%/}/"* ]]; then
             echo "::error::base buf-config must resolve within proto-path"
             exit 1
           fi
         fi
+        for RESOLVED_PATH in "$PROTO_PATH" "$BUF_CONFIG"; do
+          if [[ "$RESOLVED_PATH" == *$'\r'* || "$RESOLVED_PATH" == *$'\n'* ]]; then
+            echo "::error::Resolved paths must not contain carriage returns or newlines"
+            exit 1
+          fi
+        done
 
         cd "$PROTO_PATH"
 
