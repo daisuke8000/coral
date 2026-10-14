@@ -4,11 +4,32 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      compatible-updates:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+      security-updates:
+        applies-to: security-updates
+        patterns: ["*"]
   - package-ecosystem: "cargo"
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      compatible-updates:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+      security-updates:
+        applies-to: security-updates
+        patterns: ["*"]
   - package-ecosystem: "npm"
     directory: "/ui"
     schedule:
       interval: "weekly"
+    groups:
+      compatible-updates:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+      security-updates:
+        applies-to: security-updates
+        patterns: ["*"]
