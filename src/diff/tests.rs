@@ -187,12 +187,6 @@ fn test_to_markdown_with_changes() {
     let diff = DiffReport::compute(&base, &head);
     let markdown = diff.to_markdown();
 
-    assert!(markdown.contains("### Changes from Base"));
-    assert!(markdown.contains("✅ Added"));
-    assert!(markdown.contains("⚠️ Modified"));
-    assert!(markdown.contains("❌ Removed"));
-    assert!(markdown.contains("NewMessage"));
-    assert!(markdown.contains("OldMessage"));
     assert_eq!(
         markdown,
         "### Changes from Base\n\n\
