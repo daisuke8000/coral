@@ -153,6 +153,7 @@ jobs:
 
   deploy-pages:
     name: Deploy to GitHub Pages
+    timeout-minutes: 5
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     needs: action-test
