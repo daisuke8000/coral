@@ -86,13 +86,15 @@ impl Analyzer {
 
             // Use the same scoped traversal for nested field dependencies.
             for (message, scoped_name) in util::scoped_messages(&file.message_type) {
-                model.edges.extend(self.create_edges(
-                    &util::generate_node_id(package, &scoped_name),
-                    message
-                        .field
-                        .iter()
-                        .filter_map(|field| field.type_name.as_ref()),
-                ));
+                model.edges.extend(
+                    self.create_edges(
+                        &util::generate_node_id(package, &scoped_name),
+                        message
+                            .field
+                            .iter()
+                            .filter_map(|field| field.type_name.as_ref()),
+                    ),
+                );
             }
         }
 
