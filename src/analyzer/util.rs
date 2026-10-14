@@ -1,6 +1,6 @@
 //! Utility functions for the analyzer module.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use prost_types::field_descriptor_proto::{Label, Type};
 
@@ -80,7 +80,7 @@ pub(crate) fn type_to_string(field_type: Option<i32>, type_name: Option<&String>
 }
 
 pub(crate) fn group_packages(nodes: &[Node]) -> Vec<Package> {
-    let mut package_map: HashMap<String, Vec<String>> = HashMap::new();
+    let mut package_map: BTreeMap<String, Vec<String>> = BTreeMap::new();
 
     for node in nodes {
         package_map

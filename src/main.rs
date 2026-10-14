@@ -1,3 +1,4 @@
+use std::io::Read;
 use std::path::PathBuf;
 
 use anyhow::Result;
@@ -45,16 +46,18 @@ enum OutputMode {
 }
 
 fn read_diff_json(path: &PathBuf) -> Result<String> {
-    let metadata = std::fs::metadata(path)?;
-    if metadata.len() > MAX_DIFF_JSON_BYTES {
+    let mut bytes = Vec::new();
+    std::fs::File::open(path)?
+        .take(MAX_DIFF_JSON_BYTES + 1)
+        .read_to_end(&mut bytes)?;
+    if bytes.len() as u64 > MAX_DIFF_JSON_BYTES {
         anyhow::bail!(
             "diff input exceeds {} bytes: {}",
             MAX_DIFF_JSON_BYTES,
             path.display()
         );
     }
-
-    Ok(std::fs::read_to_string(path)?)
+    Ok(String::from_utf8(bytes)?)
 }
 
 #[tokio::main]
@@ -117,4 +120,31 @@ async fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn diff_reader_enforces_the_limit_while_reading() {
+        let path = std::env::temp_dir().join(format!(
+            "coral-diff-limit-{}-{}.json",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let file = std::fs::File::create_new(&path).unwrap();
+        file.set_len(MAX_DIFF_JSON_BYTES + 1).unwrap();
+        let result = read_diff_json(&path);
+        std::fs::remove_file(&path).unwrap();
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("diff input exceeds")
+        );
+    }
 }

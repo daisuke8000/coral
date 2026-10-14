@@ -2,7 +2,7 @@
 //!
 //! Compares two GraphModels and generates a report showing added, modified, and removed items.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 
@@ -196,27 +196,32 @@ impl DiffReport {
     }
 
     /// Generic diff computation for named items.
-    fn compute_item_changes<T: Clone>(
+    fn compute_item_changes<T: Clone + PartialEq>(
         base_items: &[T],
         head_items: &[T],
         get_name: fn(&T) -> &str,
         make_added: fn(T) -> Change,
         make_removed: fn(T) -> Change,
     ) -> Vec<Change> {
-        let base_set: HashSet<&str> = base_items.iter().map(get_name).collect();
-        let head_set: HashSet<&str> = head_items.iter().map(get_name).collect();
-
+        let base: BTreeMap<&str, &T> = base_items
+            .iter()
+            .map(|item| (get_name(item), item))
+            .collect();
+        let head: BTreeMap<&str, &T> = head_items
+            .iter()
+            .map(|item| (get_name(item), item))
+            .collect();
         let mut changes = Vec::new();
 
-        for name in head_set.difference(&base_set) {
-            if let Some(item) = head_items.iter().find(|i| get_name(i) == *name) {
-                changes.push(make_added(item.clone()));
+        // A changed definition is a removal plus addition, preserving the report contract.
+        for (name, item) in &base {
+            if head.get(name).is_none_or(|next| *next != *item) {
+                changes.push(make_removed((*item).clone()));
             }
         }
-
-        for name in base_set.difference(&head_set) {
-            if let Some(item) = base_items.iter().find(|i| get_name(i) == *name) {
-                changes.push(make_removed(item.clone()));
+        for (name, item) in &head {
+            if base.get(name).is_none_or(|previous| *previous != *item) {
+                changes.push(make_added((*item).clone()));
             }
         }
 

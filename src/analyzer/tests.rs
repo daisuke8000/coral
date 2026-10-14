@@ -239,3 +239,37 @@ fn test_multiple_services_same_file() {
             .all(|n| n.file == "api/v1/api.proto" && n.node_type == NodeType::Service)
     );
 }
+
+#[test]
+fn analyzer_reuse_does_not_resolve_types_from_an_earlier_snapshot() {
+    let mut analyzer = Analyzer::new();
+    let _ = analyzer.analyze(&FileDescriptorSet {
+        file: vec![FileDescriptorProto {
+            name: Some("old.proto".into()),
+            package: Some("old".into()),
+            message_type: vec![DescriptorProto {
+                name: Some("Gone".into()),
+                ..Default::default()
+            }],
+            ..Default::default()
+        }],
+    });
+    let graph = analyzer.analyze(&FileDescriptorSet {
+        file: vec![FileDescriptorProto {
+            name: Some("new.proto".into()),
+            package: Some("new".into()),
+            message_type: vec![DescriptorProto {
+                name: Some("Current".into()),
+                field: vec![FieldDescriptorProto {
+                    name: Some("stale".into()),
+                    type_name: Some(".old.Gone".into()),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }],
+            ..Default::default()
+        }],
+    });
+    assert_eq!(graph.nodes.len(), 1);
+    assert!(graph.edges.is_empty());
+}

@@ -32,6 +32,9 @@ impl Analyzer {
 
     #[must_use]
     pub fn analyze(&mut self, fds: &FileDescriptorSet) -> GraphModel {
+        self.type_to_node_id.clear();
+        self.type_to_message_def.clear();
+        self.external_packages.clear();
         let mut model = GraphModel::default();
 
         // First pass: Create Message/Enum nodes and build type mappings
