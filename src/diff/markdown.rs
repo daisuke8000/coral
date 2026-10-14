@@ -2,6 +2,7 @@
 
 use super::core::{Change, DiffItems, DiffReport};
 use crate::domain::NodeType;
+use crate::reporter::escape_markdown_cell;
 
 impl DiffReport {
     /// Generate Markdown representation of the diff.
@@ -48,12 +49,6 @@ impl DiffReport {
     }
 }
 
-fn escape_markdown_cell(s: &str) -> String {
-    s.replace('|', r"\|")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-}
-
 fn node_type_label(node_type: &NodeType) -> &'static str {
     match node_type {
         NodeType::Service => "Service",
@@ -85,55 +80,24 @@ fn render_diff_table(items: &DiffItems, output: &mut String) {
 }
 
 fn summarize_changes(changes: &[Change]) -> String {
-    let counts: &[(&str, usize)] = &[
-        (
-            "+field",
-            changes
-                .iter()
-                .filter(|c| matches!(c, Change::FieldAdded { .. }))
-                .count(),
-        ),
-        (
-            "-field",
-            changes
-                .iter()
-                .filter(|c| matches!(c, Change::FieldRemoved { .. }))
-                .count(),
-        ),
-        (
-            "+method",
-            changes
-                .iter()
-                .filter(|c| matches!(c, Change::MethodAdded { .. }))
-                .count(),
-        ),
-        (
-            "-method",
-            changes
-                .iter()
-                .filter(|c| matches!(c, Change::MethodRemoved { .. }))
-                .count(),
-        ),
-        (
-            "+value",
-            changes
-                .iter()
-                .filter(|c| matches!(c, Change::EnumValueAdded { .. }))
-                .count(),
-        ),
-        (
-            "-value",
-            changes
-                .iter()
-                .filter(|c| matches!(c, Change::EnumValueRemoved { .. }))
-                .count(),
-        ),
-    ];
+    let mut counts = [0usize; 6];
+    for change in changes {
+        let index = match change {
+            Change::FieldAdded { .. } => 0,
+            Change::FieldRemoved { .. } => 1,
+            Change::MethodAdded { .. } => 2,
+            Change::MethodRemoved { .. } => 3,
+            Change::EnumValueAdded { .. } => 4,
+            Change::EnumValueRemoved { .. } => 5,
+        };
+        counts[index] += 1;
+    }
 
     counts
-        .iter()
-        .filter(|(_, n)| *n > 0)
-        .map(|(label, n)| {
+        .into_iter()
+        .zip(["+field", "-field", "+method", "-method", "+value", "-value"])
+        .filter(|(n, _)| *n > 0)
+        .map(|(n, label)| {
             let (sign, kind) = label.split_at(1);
             format!("{sign}{n} {kind}(s)")
         })

@@ -193,6 +193,23 @@ fn test_to_markdown_with_changes() {
     assert!(markdown.contains("❌ Removed"));
     assert!(markdown.contains("NewMessage"));
     assert!(markdown.contains("OldMessage"));
+    assert_eq!(
+        markdown,
+        "### Changes from Base\n\n\
+         #### ✅ Added (+1)\n\
+         | Type | Name | Package |\n\
+         |------|------|--------|\n\
+         | Message | NewMessage | user.v1 |\n\n\
+         #### ⚠️ Modified (2)\n\
+         | Type | Name | Changes |\n\
+         |------|------|--------|\n\
+         | Message | User | +1 field(s) |\n\
+         | Service | UserService | +1 method(s) |\n\n\
+         #### ❌ Removed (-1)\n\
+         | Type | Name | Package |\n\
+         |------|------|--------|\n\
+         | Message | OldMessage | user.v1 |\n\n"
+    );
 }
 
 #[test]

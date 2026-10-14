@@ -2,7 +2,7 @@
 //!
 //! Compares two GraphModels and generates a report showing added, modified, and removed items.
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
@@ -69,37 +69,15 @@ impl DiffReport {
     /// Compute differences between base and head GraphModels.
     #[must_use]
     pub fn compute(base: &GraphModel, head: &GraphModel) -> Self {
-        let base_nodes: HashMap<&str, &Node> =
+        let base_nodes: BTreeMap<&str, &Node> =
             base.nodes.iter().map(|n| (n.id.as_str(), n)).collect();
-        let head_nodes: HashMap<&str, &Node> =
+        let head_nodes: BTreeMap<&str, &Node> =
             head.nodes.iter().map(|n| (n.id.as_str(), n)).collect();
 
-        let base_ids: HashSet<&str> = base_nodes.keys().copied().collect();
-        let head_ids: HashSet<&str> = head_nodes.keys().copied().collect();
-
-        // Replacing a message with an enum/service at the same ID is a removal
-        // plus addition, not an unchanged node or an unrepresentable modification.
-        let added = Self::collect_diff_items(
-            head_ids.iter().copied().filter(|id| {
-                base_nodes
-                    .get(id)
-                    .is_none_or(|base| base.node_type != head_nodes[id].node_type)
-            }),
-            &head_nodes,
-        );
-        let removed = Self::collect_diff_items(
-            base_ids.iter().copied().filter(|id| {
-                head_nodes
-                    .get(id)
-                    .is_none_or(|head| head.node_type != base_nodes[id].node_type)
-            }),
-            &base_nodes,
-        );
-
-        let mut modified: Vec<ModifiedItem> = base_ids
-            .intersection(&head_ids)
-            .filter_map(|id| {
-                let base_node = base_nodes.get(id)?;
+        // Ordered indexes keep every category deterministic without extra ID sets/sorts.
+        let modified = base_nodes
+            .iter()
+            .filter_map(|(id, base_node)| {
                 let head_node = head_nodes.get(id)?;
                 if base_node.node_type != head_node.node_type {
                     return None;
@@ -108,11 +86,9 @@ impl DiffReport {
             })
             .collect();
 
-        modified.sort_by(|a, b| a.node_id.cmp(&b.node_id));
-
         Self {
-            added,
-            removed,
+            added: Self::collect_diff_items(&head_nodes, &base_nodes),
+            removed: Self::collect_diff_items(&base_nodes, &head_nodes),
             modified,
         }
     }
@@ -123,27 +99,28 @@ impl DiffReport {
         !self.added.is_empty() || !self.removed.is_empty() || !self.modified.is_empty()
     }
 
-    fn collect_diff_items<'a>(
-        ids: impl Iterator<Item = &'a str>,
-        nodes: &HashMap<&str, &Node>,
+    fn collect_diff_items(
+        nodes: &BTreeMap<&str, &Node>,
+        other: &BTreeMap<&str, &Node>,
     ) -> DiffItems {
         let mut items = DiffItems::default();
 
-        for id in ids {
-            if let Some(node) = nodes.get(id) {
-                let diff_node = DiffNode::from(*node);
-                match node.node_type {
-                    NodeType::Service => items.services.push(diff_node),
-                    NodeType::Message => items.messages.push(diff_node),
-                    NodeType::Enum => items.enums.push(diff_node),
-                    NodeType::External => {}
-                }
+        for (id, node) in nodes {
+            // A kind replacement at the same ID is an addition plus removal.
+            if other
+                .get(id)
+                .is_some_and(|other| other.node_type == node.node_type)
+            {
+                continue;
+            }
+            let diff_node = DiffNode::from(*node);
+            match node.node_type {
+                NodeType::Service => items.services.push(diff_node),
+                NodeType::Message => items.messages.push(diff_node),
+                NodeType::Enum => items.enums.push(diff_node),
+                NodeType::External => {}
             }
         }
-
-        items.services.sort_by(|a, b| a.id.cmp(&b.id));
-        items.messages.sort_by(|a, b| a.id.cmp(&b.id));
-        items.enums.sort_by(|a, b| a.id.cmp(&b.id));
 
         items
     }
@@ -238,18 +215,13 @@ impl DiffReport {
         let mut changes = Vec::new();
 
         // A changed definition is a removal plus addition, preserving the report contract.
-        for (name, (index, item)) in &base {
-            if head.get(name).is_none_or(|(next_index, next)| {
-                *next != *item || (order_sensitive && next_index != index)
-            }) {
-                changes.push(make_removed((*item).clone()));
-            }
-        }
-        for (name, (index, item)) in &head {
-            if base.get(name).is_none_or(|(previous_index, previous)| {
-                *previous != *item || (order_sensitive && previous_index != index)
-            }) {
-                changes.push(make_added((*item).clone()));
+        for (items, other, change) in [(&base, &head, make_removed), (&head, &base, make_added)] {
+            for (name, (index, item)) in items {
+                if other.get(name).is_none_or(|(other_index, other_item)| {
+                    *other_item != *item || (order_sensitive && other_index != index)
+                }) {
+                    changes.push(change((*item).clone()));
+                }
             }
         }
 
