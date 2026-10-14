@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback } from 'react';
 import type { GraphData } from '@/types/graph';
 
 interface UsePackageGroupsReturn {
@@ -10,10 +10,6 @@ interface UsePackageGroupsReturn {
   expandAll: () => void;
   /** Collapse all packages */
   collapseAll: () => void;
-  /** Check if a specific package is expanded */
-  isPackageExpanded: (packageId: string) => boolean;
-  /** Check if a node should be visible based on package expansion state */
-  isNodeVisible: (nodeId: string) => boolean;
   /** Count of expanded packages */
   expandedCount: number;
   /** Total package count */
@@ -25,17 +21,6 @@ export function usePackageGroups(data: GraphData): UsePackageGroupsReturn {
   const [expandedPackages, setExpandedPackages] = useState<Set<string>>(
     new Set()
   );
-
-  // Build a lookup map: nodeId -> packageId
-  const nodeToPackage = useMemo(() => {
-    const map = new Map<string, string>();
-    data.packages.forEach((pkg) => {
-      pkg.nodeIds.forEach((nodeId) => {
-        map.set(nodeId, pkg.id);
-      });
-    });
-    return map;
-  }, [data.packages]);
 
   const togglePackage = useCallback((packageId: string) => {
     setExpandedPackages((prev) => {
@@ -57,27 +42,11 @@ export function usePackageGroups(data: GraphData): UsePackageGroupsReturn {
     setExpandedPackages(new Set());
   }, []);
 
-  const isPackageExpanded = useCallback(
-    (packageId: string) => expandedPackages.has(packageId),
-    [expandedPackages]
-  );
-
-  const isNodeVisible = useCallback(
-    (nodeId: string) => {
-      const packageId = nodeToPackage.get(nodeId);
-      if (!packageId) return true; // Nodes without package are always visible
-      return expandedPackages.has(packageId);
-    },
-    [nodeToPackage, expandedPackages]
-  );
-
   return {
     expandedPackages,
     togglePackage,
     expandAll,
     collapseAll,
-    isPackageExpanded,
-    isNodeVisible,
     expandedCount: expandedPackages.size,
     totalPackages: data.packages.length,
   };

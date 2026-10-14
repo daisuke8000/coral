@@ -4,25 +4,26 @@ import type { GraphData, GraphNode } from '@/types/graph';
 export function useSelection(data: GraphData | null) {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
-  const selectedNode = useMemo((): GraphNode | null => {
-    if (!selectedNodeId || !data) return null;
-    return data.nodes.find((n) => n.id === selectedNodeId) ?? null;
-  }, [selectedNodeId, data]);
+  const index = useMemo(() => {
+    const nodes = new Map(data?.nodes.map((node) => [node.id, node]));
+    const neighbors = new Map<string, Set<string>>();
+    for (const edge of data?.edges ?? []) {
+      for (const [source, target] of [[edge.source, edge.target], [edge.target, edge.source]]) {
+        const ids = neighbors.get(source) ?? new Set<string>();
+        ids.add(target);
+        neighbors.set(source, ids);
+      }
+    }
+    return { nodes, neighbors };
+  }, [data]);
 
-  const connectedNodeIds = useMemo((): Set<string> => {
-    if (!selectedNodeId || !data) return new Set<string>();
-    const ids = new Set<string>();
-    data.edges.forEach((e) => {
-      if (e.source === selectedNodeId) ids.add(e.target);
-      if (e.target === selectedNodeId) ids.add(e.source);
-    });
-    return ids;
-  }, [selectedNodeId, data]);
+  const selectedNode: GraphNode | null = selectedNodeId ? index.nodes.get(selectedNodeId) ?? null : null;
+  const connectedNodeIds = selectedNodeId ? index.neighbors.get(selectedNodeId) : undefined;
 
   const isNodeHighlighted = useCallback(
     (nodeId: string): boolean => {
       if (!selectedNodeId) return true;
-      return nodeId === selectedNodeId || connectedNodeIds.has(nodeId);
+      return nodeId === selectedNodeId || (connectedNodeIds?.has(nodeId) ?? false);
     },
     [selectedNodeId, connectedNodeIds]
   );

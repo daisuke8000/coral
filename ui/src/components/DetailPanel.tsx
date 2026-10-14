@@ -229,6 +229,7 @@ function MethodItem({ method, expandedTypes, onToggleType, findMessage }: Method
             min-h-[32px] sm:min-h-0 touch-manipulation
             ${isExpanded ? 'bg-neon-cyan/10' : ''}
           `}
+          aria-expanded={isExpanded}
           onClick={() => onToggleType(typeName)}
         >
           {typeName}
@@ -341,7 +342,7 @@ function EnumDetails({ values }: { values: EnumValue[] }) {
       ) : (
         <ul className="space-y-1">
           {values.map((v) => (
-            <li key={v.number} className="flex items-center justify-between p-2 hover:bg-white/5 rounded transition-colors">
+            <li key={v.name} className="flex items-center justify-between p-2 hover:bg-white/5 rounded transition-colors">
               <span className="text-white text-sm sm:text-base font-medium">{v.name}</span>
               <span className="text-text-secondary text-xs sm:text-sm font-mono">= {v.number}</span>
             </li>

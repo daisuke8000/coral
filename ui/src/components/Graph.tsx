@@ -8,7 +8,7 @@ import {
   useNodesState,
   useEdgesState,
   type Node,
-  type Edge,
+  type NodeTypes,
   type NodeMouseHandler,
   BackgroundVariant,
 } from '@xyflow/react';
@@ -20,8 +20,8 @@ import {
   ExternalNode,
   EnumNode,
   PackageGroupNode,
-  type PackageNodeData,
 } from '@/components/nodes';
+import { calculateLayout } from '@/lib/graphView';
 import { DetailPanel } from '@/components/DetailPanel';
 import { PackageFilterPanel } from '@/components/PackageFilterPanel';
 import { useSelection } from '@/hooks/useSelection';
@@ -29,7 +29,7 @@ import { useAutoLayout } from '@/hooks/useAutoLayout';
 import { usePackageGroups } from '@/hooks/usePackageGroups';
 import { usePackageVisibility } from '@/hooks/usePackageVisibility';
 import { useIsMobile } from '@/hooks/useIsMobile';
-import type { GraphData, NodeData, NodeType } from '@/types/graph';
+import type { GraphData } from '@/types/graph';
 import {
   NEON_MAGENTA,
   NEON_CYAN,
@@ -40,8 +40,7 @@ import {
 } from '@/constants/layout';
 import { BUTTON_BASE_STYLES } from '@/constants/styles';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const nodeTypes: Record<string, any> = {
+const nodeTypes: NodeTypes = {
   service: ServiceNode,
   message: MessageNode,
   enum: EnumNode,
@@ -51,13 +50,6 @@ const nodeTypes: Record<string, any> = {
 
 interface GraphProps {
   data: GraphData;
-}
-
-interface CalculateLayoutOptions {
-  expandedPackages: Set<string>;
-  togglePackage: (packageId: string) => void;
-  visiblePackages: Set<string>;
-  nodeToPackageMap: Map<string, string>;
 }
 
 // MiniMap node color mapping (memoized outside component)
@@ -77,125 +69,6 @@ const getNodeColor = (node: Node): string => {
       return NEON_WHITE;
   }
 };
-
-function calculateLayout(
-  data: GraphData,
-  options: CalculateLayoutOptions
-): { nodes: Node[]; edges: Edge[] } {
-  const { expandedPackages, togglePackage, visiblePackages, nodeToPackageMap } = options;
-  const packageMap = new Map<string, typeof data.nodes>();
-
-  // Group nodes by package (only visible packages)
-  data.nodes.forEach((node) => {
-    if (!visiblePackages.has(node.package)) return;
-    const existing = packageMap.get(node.package) || [];
-    existing.push(node);
-    packageMap.set(node.package, existing);
-  });
-
-  const nodes: Node[] = [];
-  let packageX = 0;
-  const packageWidth = 300;
-  const nodeHeight = 120;
-  const packagePadding = 100;
-  const packageNodeHeight = 60;
-
-  const parentChildEdges: Edge[] = [];
-
-  packageMap.forEach((packageNodes, packageId) => {
-    const isExpanded = expandedPackages.has(packageId);
-    const packageLabel = packageId || 'default';
-    const pkgNodeId = `pkg-${packageId}`;
-
-    const packageNodeData: PackageNodeData = {
-      label: packageLabel,
-      packageId: packageId,
-      nodeCount: packageNodes.length,
-      isExpanded: isExpanded,
-      onToggle: togglePackage,
-    };
-
-    nodes.push({
-      id: pkgNodeId,
-      type: 'package',
-      position: {
-        x: packageX + 50,
-        y: 0,
-      },
-      data: packageNodeData,
-    });
-
-    if (isExpanded) {
-      packageNodes.forEach((node, nodeIndex) => {
-        const nodeData: NodeData = {
-          label: node.label,
-          file: node.file,
-          package: node.package,
-          nodeType: node.type as NodeType,
-          details: node.details,
-        };
-        nodes.push({
-          id: node.id,
-          type: node.type,
-          position: {
-            x: 0,
-            y: (nodeIndex + 1) * nodeHeight + packageNodeHeight,
-          },
-          data: nodeData,
-          parentId: pkgNodeId,
-        });
-
-        parentChildEdges.push({
-          id: `pkg-edge-${pkgNodeId}-${node.id}`,
-          source: pkgNodeId,
-          target: node.id,
-          type: 'smoothstep',
-          style: { stroke: 'rgba(128, 128, 255, 0.4)', strokeWidth: 1, strokeDasharray: '4 2' },
-        });
-      });
-    }
-
-    packageX += packageWidth + packagePadding;
-  });
-
-  // Create edges with smart routing (filter by visible packages)
-  const edgeSet = new Set<string>();
-  const edges: Edge[] = [];
-
-  data.edges.forEach((edge, index) => {
-    const sourcePackage = nodeToPackageMap.get(edge.source);
-    const targetPackage = nodeToPackageMap.get(edge.target);
-
-    // Skip edges where either endpoint's package is hidden
-    if (sourcePackage && !visiblePackages.has(sourcePackage)) return;
-    if (targetPackage && !visiblePackages.has(targetPackage)) return;
-
-    const sourceExpanded = sourcePackage ? expandedPackages.has(sourcePackage) : true;
-    const targetExpanded = targetPackage ? expandedPackages.has(targetPackage) : true;
-
-    // Determine actual source and target based on expansion state
-    const actualSource = sourceExpanded ? edge.source : `pkg-${sourcePackage}`;
-    const actualTarget = targetExpanded ? edge.target : `pkg-${targetPackage}`;
-
-    // Skip self-loops on package level
-    if (actualSource === actualTarget) return;
-
-    // Deduplicate edges
-    const edgeKey = `${actualSource}->${actualTarget}`;
-    if (edgeSet.has(edgeKey)) return;
-    edgeSet.add(edgeKey);
-
-    edges.push({
-      id: `edge-${index}-${edgeKey}`,
-      source: actualSource,
-      target: actualTarget,
-      animated: true,
-      style: { stroke: 'rgba(255, 255, 255, 0.4)', strokeWidth: 2 },
-    });
-  });
-
-  return { nodes, edges: [...parentChildEdges, ...edges] };
-}
 
 export function Graph({ data }: GraphProps) {
   const {
@@ -224,6 +97,7 @@ export function Graph({ data }: GraphProps) {
   } = usePackageVisibility(data);
 
   const [filterPanelOpen, setFilterPanelOpen] = useState(false);
+  const [motionEnabled, setMotionEnabled] = useState(true);
 
   const nodeToPackageMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -245,12 +119,8 @@ export function Graph({ data }: GraphProps) {
   const isMobile = useIsMobile();
 
   useEffect(() => {
-    const { nodes: newNodes, edges: newEdges } = calculateLayout(data, {
-      expandedPackages,
-      togglePackage,
-      visiblePackages,
-      nodeToPackageMap,
-    });
+    const newNodes = initialNodes;
+    const newEdges = initialEdges;
     if (layoutMode === 'auto') {
       // Strip parentId so Dagre can layout all nodes flat
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -261,16 +131,20 @@ export function Graph({ data }: GraphProps) {
       setNodes(newNodes);
     }
     setEdges(newEdges);
-  }, [expandedPackages, visiblePackages, data, togglePackage, nodeToPackageMap, setNodes, setEdges, layoutMode, getLayoutedNodes]);
+  }, [initialNodes, initialEdges, setNodes, setEdges, layoutMode, getLayoutedNodes]);
+
+  const highlightedPackages = useMemo(() => new Set(
+    data.nodes.filter((node) => isNodeHighlighted(node.id)).map((node) => node.package)
+  ), [data.nodes, isNodeHighlighted]);
 
   const styledNodes = useMemo(
     () =>
       nodes.map((node) => ({
         ...node,
-        className: isNodeHighlighted(node.id) ? '' : 'dimmed',
+        className: isNodeHighlighted(node.id) || (node.type === 'package' && highlightedPackages.has(String(node.data.packageId))) ? '' : 'dimmed',
         selected: node.id === selectedNodeId,
       })),
-    [nodes, selectedNodeId, isNodeHighlighted]
+    [nodes, selectedNodeId, isNodeHighlighted, highlightedPackages]
   );
 
   const styledEdges = useMemo(
@@ -282,13 +156,11 @@ export function Graph({ data }: GraphProps) {
           style: highlighted
             ? { stroke: 'var(--color-neon-cyan)', strokeWidth: 3 }
             : { stroke: 'rgba(255, 255, 255, 0.1)', strokeWidth: 1 },
-          animated: highlighted,
+          animated: motionEnabled && highlighted,
         };
       }),
-    [edges, isEdgeHighlighted]
+    [edges, isEdgeHighlighted, motionEnabled]
   );
-
-  const onConnect = useCallback(() => {}, []);
 
   const onNodeClick: NodeMouseHandler = useCallback(
     (_, node) => {
@@ -305,24 +177,8 @@ export function Graph({ data }: GraphProps) {
   }, [clearSelection]);
 
   const handleLayoutToggle = useCallback(() => {
-    if (layoutMode === 'flat') {
-      // Strip parentId so Dagre can layout all nodes flat
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const stripped = nodes.map(({ parentId: _parentId, ...rest }) => rest);
-      const layoutedNodes = getLayoutedNodes(stripped, edges, 'TB');
-      setNodes(layoutedNodes);
-      setLayoutMode('auto');
-    } else {
-      const { nodes: flatNodes } = calculateLayout(data, {
-        expandedPackages,
-        togglePackage,
-        visiblePackages,
-        nodeToPackageMap,
-      });
-      setNodes(flatNodes);
-      setLayoutMode('flat');
-    }
-  }, [layoutMode, nodes, edges, getLayoutedNodes, setNodes, data, expandedPackages, togglePackage, visiblePackages, nodeToPackageMap]);
+    setLayoutMode((mode) => mode === 'flat' ? 'auto' : 'flat');
+  }, []);
 
   const handleFilterPanelToggle = useCallback(() => {
     setFilterPanelOpen((prev) => !prev);
@@ -342,13 +198,13 @@ export function Graph({ data }: GraphProps) {
         edges={styledEdges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
+        nodesConnectable={false}
         onNodeClick={onNodeClick}
         onPaneClick={onPaneClick}
         nodeTypes={nodeTypes}
         fitView
         attributionPosition="bottom-left"
-        className="neon-flow"
+        className={`neon-flow ${motionEnabled ? '' : 'quiet-flow'}`}
         minZoom={0.1}
         maxZoom={2}
         panOnScroll={true}
@@ -372,6 +228,15 @@ export function Graph({ data }: GraphProps) {
         )}
         <Panel position="top-right" className="m-2 flex flex-col sm:flex-row gap-2">
           <button
+            className={BUTTON_BASE_STYLES}
+            onClick={() => setMotionEnabled((enabled) => !enabled)}
+            aria-pressed={motionEnabled}
+            title="Toggle graph animations"
+          >
+            {motionEnabled ? 'Animations on' : 'Animations off'}
+          </button>
+          <button
+            aria-expanded={filterPanelOpen}
             className={`${BUTTON_BASE_STYLES} ${filterPanelOpen ? 'bg-neon-cyan/20 border-neon-cyan' : ''}`}
             onClick={handleFilterPanelToggle}
             title="Filter packages"
@@ -423,7 +288,7 @@ export function Graph({ data }: GraphProps) {
           onClose={handleFilterPanelClose}
         />
       )}
-      <DetailPanel node={selectedNode} onClose={clearSelection} />
+      <DetailPanel key={selectedNode?.id} node={selectedNode} onClose={clearSelection} />
     </div>
   );
 }

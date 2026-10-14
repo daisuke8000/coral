@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useMemo, useState } from 'react';
 import type { Package } from '@/types/graph';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { useSwipeToClose } from '@/hooks/useSwipeToClose';
@@ -22,6 +22,11 @@ export const PackageFilterPanel = memo(function PackageFilterPanel({
   onHideAll,
   onClose,
 }: PackageFilterPanelProps) {
+  const [query, setQuery] = useState('');
+  const filteredPackages = useMemo(() => {
+    const term = query.trim().toLowerCase();
+    return packages.filter((pkg) => (pkg.id || 'default').toLowerCase().includes(term));
+  }, [packages, query]);
   const isMobile = useIsMobile();
   const { handleTouchStart, handleTouchEnd } = useSwipeToClose(onClose, SWIPE_THRESHOLD);
 
@@ -93,8 +98,21 @@ export const PackageFilterPanel = memo(function PackageFilterPanel({
         </button>
       </div>
 
+      <div className="p-3">
+        <input
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          aria-label="Search packages"
+          placeholder="Search packages…"
+          className="w-full rounded border border-white/20 bg-white/5 p-2 text-sm focus:outline-neon-cyan"
+        />
+        <p className="mt-2 text-xs text-text-secondary" aria-live="polite">
+          {filteredPackages.length} packages found
+        </p>
+      </div>
       <div className="p-2 sm:p-3 space-y-1">
-        {packages.map((pkg) => {
+        {filteredPackages.map((pkg) => {
           const isVisible = visiblePackages.has(pkg.id);
           const nodeCount = pkg.nodeIds.length;
 
@@ -102,7 +120,7 @@ export const PackageFilterPanel = memo(function PackageFilterPanel({
             <label
               key={pkg.id}
               className={`
-                flex items-center gap-3 p-2 sm:p-2.5 rounded-lg cursor-pointer
+                package-filter-label flex items-center gap-3 p-2 sm:p-2.5 rounded-lg cursor-pointer
                 transition-all duration-200 select-none min-h-[44px] sm:min-h-0
                 ${isVisible
                   ? 'bg-neon-cyan/10 hover:bg-neon-cyan/15'
@@ -144,9 +162,9 @@ export const PackageFilterPanel = memo(function PackageFilterPanel({
         })}
       </div>
 
-      {packages.length === 0 && (
+      {filteredPackages.length === 0 && (
         <div className="p-4 text-center text-text-secondary text-sm">
-          No packages available
+          No matching packages
         </div>
       )}
     </div>

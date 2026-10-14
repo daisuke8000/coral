@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "build:static": "tsc -b && VITE_STATIC_MODE=true vite build --base='./'",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --experimental-strip-types --test tests/*.test.ts"
   },
   "dependencies": {
     "@xyflow/react": "^12.12.0",

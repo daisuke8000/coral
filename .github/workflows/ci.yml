@@ -94,6 +94,9 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Test graph interactions
+        run: npm test
+
       - name: Build (Static Mode)
         run: npm run build:static
 

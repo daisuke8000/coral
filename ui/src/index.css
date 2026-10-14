@@ -77,8 +77,7 @@
 }
 
 .neon-flow .react-flow__edge-path {
-  stroke: rgba(255, 255, 255, 0.3) !important;
-  stroke-width: 2 !important;
+  /* Edge emphasis comes from each edge's inline style. */
 }
 
 .neon-flow .react-flow__edge.animated path {
@@ -229,4 +228,18 @@
   .package-group-node:hover {
     transform: none !important;
   }
+}
+
+/* Static glow avoids continuous paint work until motion is explicitly enabled. */
+.quiet-flow .service-node,
+.quiet-flow .message-node,
+.quiet-flow .enum-node {
+  animation: none;
+  will-change: auto;
+}
+
+.neon-flow button:focus-visible,
+.package-filter-label:focus-within {
+  outline: 2px solid var(--color-neon-cyan);
+  outline-offset: 3px;
 }
