@@ -87,13 +87,15 @@ fn nested_messages_enums_and_rpc_definitions_are_materialized() {
     outer.nested_type.push(inner);
     let mut source = file("p", vec![outer]);
     source.service.push(service(".p.Outer.Inner", ".p.Outer"));
-    let graph = Analyzer::new().analyze(&FileDescriptorSet {
-        file: vec![source],
-    });
+    let graph = Analyzer::new().analyze(&FileDescriptorSet { file: vec![source] });
     assert_closed_graph(&graph);
     assert_eq!(graph.nodes.len(), 4);
     assert_eq!(graph.edges.len(), 5);
-    let nested = graph.nodes.iter().find(|n| n.id == "p.Outer.Inner").unwrap();
+    let nested = graph
+        .nodes
+        .iter()
+        .find(|n| n.id == "p.Outer.Inner")
+        .unwrap();
     assert_eq!(nested.label, "Outer.Inner");
     assert_eq!(nested.package, "p");
     let api = graph.nodes.iter().find(|n| n.id == "p.Api").unwrap();
@@ -135,15 +137,17 @@ fn external_rpc_and_nested_references_use_descriptor_provenance() {
     external.message_type[0]
         .nested_type
         .push(message("Inner", &[]));
-    external.message_type[0].enum_type.push(EnumDescriptorProto {
-        name: Some("State".into()),
-        value: vec![EnumValueDescriptorProto {
-            name: Some("UNKNOWN".into()),
-            number: Some(0),
+    external.message_type[0]
+        .enum_type
+        .push(EnumDescriptorProto {
+            name: Some("State".into()),
+            value: vec![EnumValueDescriptorProto {
+                name: Some("UNKNOWN".into()),
+                number: Some(0),
+                ..Default::default()
+            }],
             ..Default::default()
-        }],
-        ..Default::default()
-    });
+        });
     external
         .service
         .push(service(".vendor.Outer", ".vendor.Outer"));
@@ -298,7 +302,9 @@ fn many_external_references_materialize_each_target_once() {
     let references: Vec<_> = names.iter().map(|name| format!(".vendor.{name}")).collect();
     let references: Vec<_> = references.iter().map(String::as_str).collect();
     let mut local = file("p", vec![message("Holder", &references)]);
-    local.service.push(service(".vendor.Type0", ".vendor.Type0"));
+    local
+        .service
+        .push(service(".vendor.Type0", ".vendor.Type0"));
     let graph = Analyzer::new().analyze(&FileDescriptorSet {
         file: vec![local, external],
     });
