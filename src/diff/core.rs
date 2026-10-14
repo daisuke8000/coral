@@ -165,6 +165,7 @@ impl DiffReport {
                 |m| m.name.as_str(),
                 |m| Change::MethodAdded { method: m },
                 |m| Change::MethodRemoved { method: m },
+                false,
             ),
 
             (
@@ -180,6 +181,7 @@ impl DiffReport {
                 |f| f.name.as_str(),
                 |f| Change::FieldAdded { field: f },
                 |f| Change::FieldRemoved { field: f },
+                false,
             ),
 
             (
@@ -195,6 +197,7 @@ impl DiffReport {
                 |v| v.name.as_str(),
                 |v| Change::EnumValueAdded { value: v },
                 |v| Change::EnumValueRemoved { value: v },
+                true, // Declaration order controls implicit defaults and alias precedence.
             ),
 
             _ => vec![],
@@ -220,25 +223,32 @@ impl DiffReport {
         get_name: fn(&T) -> &str,
         make_added: fn(T) -> Change,
         make_removed: fn(T) -> Change,
+        order_sensitive: bool,
     ) -> Vec<Change> {
-        let base: BTreeMap<&str, &T> = base_items
+        let base: BTreeMap<&str, (usize, &T)> = base_items
             .iter()
-            .map(|item| (get_name(item), item))
+            .enumerate()
+            .map(|(index, item)| (get_name(item), (index, item)))
             .collect();
-        let head: BTreeMap<&str, &T> = head_items
+        let head: BTreeMap<&str, (usize, &T)> = head_items
             .iter()
-            .map(|item| (get_name(item), item))
+            .enumerate()
+            .map(|(index, item)| (get_name(item), (index, item)))
             .collect();
         let mut changes = Vec::new();
 
         // A changed definition is a removal plus addition, preserving the report contract.
-        for (name, item) in &base {
-            if head.get(name).is_none_or(|next| *next != *item) {
+        for (name, (index, item)) in &base {
+            if head.get(name).is_none_or(|(next_index, next)| {
+                *next != *item || (order_sensitive && next_index != index)
+            }) {
                 changes.push(make_removed((*item).clone()));
             }
         }
-        for (name, item) in &head {
-            if base.get(name).is_none_or(|previous| *previous != *item) {
+        for (name, (index, item)) in &head {
+            if base.get(name).is_none_or(|(previous_index, previous)| {
+                *previous != *item || (order_sensitive && previous_index != index)
+            }) {
                 changes.push(make_added((*item).clone()));
             }
         }

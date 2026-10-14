@@ -103,7 +103,8 @@ async fn main() -> Result<()> {
                 }
                 OutputMode::Summary => {
                     println!("Files: {}", fds.file.len());
-                    let services = fds.file.iter().filter(|f| !f.service.is_empty()).count();
+                    let services = fds.file.iter().map(|f| f.service.len()).sum::<usize>();
+                    // Message and enum summary counts remain top-level declarations only.
                     let messages = fds.file.iter().map(|f| f.message_type.len()).sum::<usize>();
                     let enums = fds.file.iter().map(|f| f.enum_type.len()).sum::<usize>();
                     println!("Services: {services}");

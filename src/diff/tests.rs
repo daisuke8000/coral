@@ -257,6 +257,90 @@ fn enum_renumbering_is_reported() {
     ));
 }
 
+fn assert_enum_reordering_is_reported(values: &[(&str, i32)], allow_alias: bool) {
+    use prost_types::field_descriptor_proto::{Label, Type};
+    use prost_types::{
+        DescriptorProto, EnumDescriptorProto, EnumOptions, EnumValueDescriptorProto,
+        FieldDescriptorProto, FileDescriptorProto, FileDescriptorSet,
+    };
+
+    let mut fds = FileDescriptorSet {
+        file: vec![FileDescriptorProto {
+            name: Some("state.proto".into()),
+            package: Some("p".into()),
+            syntax: Some("proto2".into()),
+            enum_type: vec![EnumDescriptorProto {
+                name: Some("State".into()),
+                value: values
+                    .iter()
+                    .map(|(name, number)| EnumValueDescriptorProto {
+                        name: Some((*name).into()),
+                        number: Some(*number),
+                        ..Default::default()
+                    })
+                    .collect(),
+                options: Some(EnumOptions {
+                    allow_alias: Some(allow_alias),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }],
+            message_type: vec![DescriptorProto {
+                name: Some("Holder".into()),
+                field: vec![FieldDescriptorProto {
+                    name: Some("state".into()),
+                    number: Some(1),
+                    label: Some(Label::Optional as i32),
+                    r#type: Some(Type::Enum as i32),
+                    type_name: Some(".p.State".into()),
+                    // No explicit default: proto2 uses the first declared value.
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }],
+            ..Default::default()
+        }],
+    };
+    // Exercise the ordered JSON snapshots consumed by the diff command.
+    let snapshot = |fds: &FileDescriptorSet| -> GraphModel {
+        let graph = crate::Analyzer::new().analyze(fds);
+        serde_json::from_str(&serde_json::to_string(&graph).unwrap()).unwrap()
+    };
+    let base = snapshot(&fds);
+    assert!(!DiffReport::compute(&base, &base).has_changes());
+    fds.file[0].enum_type[0].value.swap(0, 1);
+    let diff = DiffReport::compute(&base, &snapshot(&fds));
+    assert!(diff.has_changes());
+    assert!(diff.added.is_empty());
+    assert!(diff.removed.is_empty());
+    assert_eq!(diff.modified.len(), 1);
+    assert_eq!(diff.modified[0].node_id, "p.State");
+    assert_eq!(diff.modified[0].changes.len(), 4);
+    for (name, number) in values.iter().take(2) {
+        assert!(diff.modified[0].changes.iter().any(|change| matches!(
+            change,
+            Change::EnumValueRemoved { value } if value.name == *name && value.number == *number
+        )));
+        assert!(diff.modified[0].changes.iter().any(|change| matches!(
+            change,
+            Change::EnumValueAdded { value } if value.name == *name && value.number == *number
+        )));
+    }
+    let markdown = diff.to_markdown();
+    assert!(markdown.contains("| Enum | State | +2 value(s), -2 value(s) |"));
+}
+
+#[test]
+fn proto2_enum_implicit_default_order_change_is_reported() {
+    assert_enum_reordering_is_reported(&[("ON", 1), ("OFF", 2)], false);
+}
+
+#[test]
+fn enum_alias_canonical_precedence_change_is_reported() {
+    // The default number stays 1; its first declared alias changes to ENABLED.
+    assert_enum_reordering_is_reported(&[("ON", 1), ("ENABLED", 1), ("OFF", 2)], true);
+}
+
 #[test]
 fn same_id_definition_kind_change_is_removal_and_addition() {
     let base = create_base_model();
