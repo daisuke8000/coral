@@ -144,6 +144,15 @@ export function Graph({ data }: GraphProps) {
   const [layoutError, setLayoutError] = useState(false);
   const isMobile = useIsMobile();
 
+  useEffect(() => {
+    if (!isMobile || !filterPanelOpen || !selectedNode) return;
+    // Packages wins when desktop's two panes become full-width mobile sheets.
+    const filter = workbenchRef.current?.querySelector('#package-filter-panel');
+    if (filter && !filter.contains(document.activeElement)) {
+      filter.querySelector<HTMLInputElement>('input[type="search"]')?.focus();
+    }
+  }, [isMobile, filterPanelOpen, selectedNode]);
+
   const cancelPendingFit = useCallback(() => {
     fitRef.current?.cancel();
     fitRef.current = null;
@@ -401,7 +410,7 @@ export function Graph({ data }: GraphProps) {
           onClose={handleFilterPanelClose}
         />
       )}
-      <DetailPanel node={selectedNode} onClose={handleDetailClose} />
+      <DetailPanel node={isMobile && filterPanelOpen ? null : selectedNode} onClose={handleDetailClose} />
     </div>
   );
 }
