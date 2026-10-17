@@ -11,7 +11,7 @@ Proto dependency visualizer for gRPC/Connect projects with a Neon-style interact
 - **Interactive Visualization**: React Flow-based graph with zoom, pan, and explore
 - **Neon Aesthetics**: Dark mode with glow effects and animated data flow
 - **Package Grouping**: Expand/collapse packages and search/filter their visibility
-- **Auto Layout**: Load Dagre on demand, with animated layout/camera transitions and explicit Motion off/reduced-motion support
+- **Auto Layout**: Load Dagre on demand, with synchronized node/edge positions, animated camera transitions and explicit Motion off/reduced-motion support
 - **Proto Diff**: Compare two proto snapshots and detect added/modified/removed definitions
 - **Markdown Reports**: Generate detailed Markdown output for PR comments
 - **Pipeline-Friendly**: `buf build -o - | coral serve` workflow
@@ -204,6 +204,8 @@ cargo build --release --locked
 cd ui
 npm ci
 npm test
+npx playwright install chromium  # First-time browser regression setup
+npm run test:browser
 npm run lint
 npm run build         # Production API-mode build
 npm run build:static  # Static build with relative asset URLs

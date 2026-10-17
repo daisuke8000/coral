@@ -80,11 +80,12 @@
 }
 
 @keyframes node-arrive {
-  from { opacity: 0; transform: translateY(-16px) scale(0.96); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
-/* Newly expanded definitions arrive gently while retaining their original pulses. */
+/* Handle-bearing cards may fade/glow, but must not transform independently of
+   React Flow's geometry. ResizeObserver does not track CSS transforms. */
 .service-node { animation: pulse-magenta 3s ease-in-out infinite, node-arrive 0.5s ease-out; }
 .message-node { animation: pulse-cyan 4s ease-in-out infinite, node-arrive 0.5s ease-out; }
 .enum-node { animation: pulse-yellow 4s ease-in-out infinite, node-arrive 0.5s ease-out; }
@@ -128,7 +129,8 @@
 }
 
 .react-flow__node {
-  transition: transform 0.5s ease-out, opacity 0.3s ease !important;
+  /* Node positions and edges must commit together, including parent/child moves. */
+  transition: opacity 0.3s ease;
 }
 
 .react-flow__node.dragging {
@@ -168,10 +170,6 @@
   .react-flow__node {
     touch-action: none;
   }
-  .graph-node:hover,
-  .package-group-node:hover {
-    transform: none;
-  }
 }
 
 .custom-scrollbar::-webkit-scrollbar { width: 6px; }
@@ -201,7 +199,7 @@
 }
 
 .quiet-flow .react-flow__node {
-  transition: opacity 0.3s ease !important;
+  transition: none !important;
 }
 
 :where(button, input, [tabindex]):focus-visible,

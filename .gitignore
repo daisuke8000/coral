@@ -24,3 +24,7 @@ target/
 
 # Local agent workspaces and private reports
 .atelier/
+
+# Browser regression artifacts
+ui/test-results/
+ui/playwright-report/

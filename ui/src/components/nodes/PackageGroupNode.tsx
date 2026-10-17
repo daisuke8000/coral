@@ -20,7 +20,7 @@ export const PackageGroupNode = memo(function PackageGroupNode({ data }: Package
   };
 
   return (
-    <div className="package-group-node rounded-xl transition-transform duration-300 hover:scale-[1.02]">
+    <div className="package-group-node rounded-xl hover:shadow-[0_0_20px_rgba(128,128,255,0.4)]">
       <Handle type="target" position={Position.Top} className="handle-top" />
       <div className="flex items-center gap-2 h-full">
         <button

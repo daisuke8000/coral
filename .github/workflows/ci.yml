@@ -97,6 +97,12 @@ jobs:
       - name: Test graph interactions
         run: npm test
 
+      - name: Install browser for graph regression tests
+        run: npx playwright install --with-deps chromium
+
+      - name: Test graph rendering
+        run: npm run test:browser -- --workers=1
+
       - name: Build (Static Mode)
         run: npm run build:static
 
