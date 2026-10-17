@@ -141,8 +141,9 @@ export function calculateLayout(
     const actualSource = sourceExpanded ? edge.source : `pkg-${sourcePackage}`;
     const actualTarget = targetExpanded ? edge.target : `pkg-${targetPackage}`;
 
-    // Skip self-loops on package level
-    if (actualSource === actualTarget) return;
+    // Only suppress references hidden inside a collapsed package, not recursive
+    // definition dependencies (e.g. a tree message referencing itself).
+    if (actualSource === actualTarget && !sourceExpanded) return;
 
     // Retain every underlying endpoint so collapsed routes still highlight correctly.
     const edgeKey = JSON.stringify([actualSource, actualTarget]);
@@ -157,6 +158,7 @@ export function calculateLayout(
       id: `edge-${edgeKey}`,
       source: actualSource,
       target: actualTarget,
+      type: actualSource === actualTarget ? 'selfReference' : 'default',
       data: { kind: 'dependency', definitionIds: new Set([edge.source, edge.target]) },
       animated: true,
       style: { stroke: 'var(--color-neon-cyan)', strokeOpacity: 0.55, strokeWidth: 2 },

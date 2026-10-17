@@ -20,6 +20,7 @@ import { BaseNode, PackageGroupNode } from '@/components/nodes';
 import { calculateLayout, reconcileNodes, type GraphViewEdge } from '@/lib/graphView';
 import { scheduleLayoutFit, type LayoutFit } from '@/lib/layoutViewport';
 import { styleGraphEdge } from '@/lib/graphSelection';
+import { SelfReferenceEdge } from '@/components/SelfReferenceEdge';
 import { DetailPanel } from '@/components/DetailPanel';
 import { PackageFilterPanel } from '@/components/PackageFilterPanel';
 import { useSelection } from '@/hooks/useSelection';
@@ -45,6 +46,8 @@ const nodeTypes: NodeTypes = {
   external: BaseNode,
   package: PackageGroupNode,
 };
+
+const edgeTypes = { selfReference: SelfReferenceEdge };
 
 interface GraphProps {
   data: GraphData;
@@ -290,9 +293,12 @@ export function Graph({ data }: GraphProps) {
         onMoveStart={(event) => { if (event) cancelPendingFit(); }}
         onNodeDragStart={handleNodeDragStart}
         nodesConnectable={false}
+        // This is a read-only visualizer, not an editor. React Flow defaults to Backspace deletion.
+        deleteKeyCode={null}
         onNodeClick={onNodeClick}
         onPaneClick={clearSelection}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         fitView
         attributionPosition="bottom-left"
         className={`neon-flow ${motionEnabled ? '' : 'quiet-flow'}`}

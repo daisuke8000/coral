@@ -28,7 +28,7 @@ const appearance = {
 export const BaseNode = memo(function BaseNode({ data }: { data: NodeData }) {
   const { className, icon } = appearance[data.nodeType];
   return (
-    <div className={`graph-node rounded-xl transition-transform duration-300 hover:scale-[1.02] ${className}`}>
+    <div className={`graph-node rounded-xl ${className}`}>
       <Handle type="target" position={Position.Top} className="handle-top" />
       <div className="text-left min-w-0">
         <div className="node-kind"><span aria-hidden="true">{icon}</span>{data.nodeType}</div>

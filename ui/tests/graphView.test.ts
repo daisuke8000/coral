@@ -40,6 +40,17 @@ test('expanded packages preserve definition endpoints', () => {
   assert.equal(result.nodes.find((node) => node.id === 'Default')?.parentId, 'pkg-');
 });
 
+test('recursive definitions have visible self-reference routes only when expanded', () => {
+  const recursive = { ...graph, edges: [...graph.edges, { source: 'Default', target: 'Default' }] };
+  const expanded = view(new Set(['', 'api']), new Set(['']), recursive);
+  const self = expanded.edges.find((edge) => edge.source === 'Default' && edge.target === 'Default');
+  assert.ok(self);
+  assert.equal(self.type, 'selfReference');
+  assert.deepEqual(self.data?.definitionIds, new Set(['Default']));
+  assert.equal(view(new Set(['', 'api']), new Set(), recursive).edges.length, 1);
+  assert.equal(view(new Set(['api']), new Set(['']), recursive).edges.length, 0);
+});
+
 test('mixed expansion routes through collapsed neighbors and keeps definition data', () => {
   const result = view(new Set(['', 'api']), new Set(['']));
   assert.ok(result.edges.some((edge) => edge.source === 'Default' && edge.target === 'pkg-api'));
