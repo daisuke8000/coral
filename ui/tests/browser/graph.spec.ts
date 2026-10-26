@@ -152,7 +152,9 @@ test('expanded self-reference survives; keyboard cannot delete read-only nodes',
   await page.getByRole('button', { name: 'Expand all packages', exact: true }).click();
   await expect(page.getByLabel('Edge from p.A to p.A', { exact: true })).toHaveCount(1);
   const node = page.locator('.react-flow__node[data-id="p.A"]');
+  await expect(node).toBeVisible();
   await node.focus();
+  await expect(node).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(page.getByRole('region', { name: 'p.A details', exact: true })).toBeVisible();
   await page.keyboard.press('Backspace');
@@ -170,7 +172,9 @@ test('mobile sheets are exclusive, close by Escape and return focus', async ({ p
   await load(page);
   await page.getByRole('button', { name: 'Expand all packages', exact: true }).click();
   const node = page.locator('.react-flow__node[data-id="p.A"]');
+  await expect(node).toBeVisible();
   await node.focus();
+  await expect(node).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(page.getByRole('region', { name: 'p.A details', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Filter packages', exact: true }).click();
