@@ -1,10 +1,11 @@
 use std::path::PathBuf;
 
 use axum::Router;
-use axum::extract::State;
-use axum::http::header::CONTENT_TYPE;
+use axum::extract::{Request, State};
+use axum::http::header::{CONTENT_TYPE, HOST};
 use axum::http::{Method, StatusCode};
-use axum::response::IntoResponse;
+use axum::middleware::{self, Next};
+use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use log::{debug, info, warn};
 use prost::bytes::Bytes;
@@ -27,6 +28,35 @@ async fn get_graph(State(state): State<AppState>) -> impl IntoResponse {
         [(CONTENT_TYPE, "application/json")],
         state.graph_json.clone(),
     )
+}
+
+fn is_local_authority(authority: &axum::http::uri::Authority) -> bool {
+    let host = authority.host();
+    !authority.as_str().contains('@')
+        && (host.eq_ignore_ascii_case("localhost") || host == "127.0.0.1")
+        && (!authority.as_str().contains(':') || authority.port_u16().is_some())
+}
+
+async fn require_local_authority(request: Request, next: Next) -> Response {
+    let mut hosts = request.headers().get_all(HOST).iter();
+    let host_header = hosts.next();
+    let host = host_header
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.parse::<axum::http::uri::Authority>().ok());
+    let uri_authority = request.uri().authority();
+    let valid = (host_header.is_none() || host.is_some())
+        && hosts.next().is_none()
+        && host
+            .as_ref()
+            .or(uri_authority)
+            .is_some_and(is_local_authority)
+        && uri_authority.is_none_or(|authority| {
+            is_local_authority(authority) && host.as_ref().is_none_or(|host| host == authority)
+        });
+    if !valid {
+        return StatusCode::BAD_REQUEST.into_response();
+    }
+    next.run(request).await
 }
 
 fn create_cors_layer() -> CorsLayer {
@@ -58,13 +88,14 @@ pub fn create_router_with_static(graph: GraphModel, static_dir: Option<PathBuf>)
         .layer(create_cors_layer())
         .with_state(state);
 
-    if let Some(dir) = static_dir {
+    let router = if let Some(dir) = static_dir {
         debug!("Serving static files from: {:?}", dir);
         let serve_dir = ServeDir::new(dir).append_index_html_on_directories(true);
         api_routes.fallback_service(serve_dir)
     } else {
         api_routes
-    }
+    };
+    router.layer(middleware::from_fn(require_local_authority))
 }
 
 pub async fn serve(graph: GraphModel, port: u16) -> anyhow::Result<()> {
@@ -157,6 +188,7 @@ mod tests {
 
         let request = Request::builder()
             .uri("/health")
+            .header(HOST, "localhost:3000")
             .body(Body::empty())
             .unwrap();
 
@@ -170,6 +202,7 @@ mod tests {
 
         let request = Request::builder()
             .uri("/api/graph")
+            .header(HOST, "localhost:3000")
             .body(Body::empty())
             .unwrap();
 
@@ -192,6 +225,7 @@ mod tests {
 
         let request = Request::builder()
             .uri("/api/graph")
+            .header(HOST, "localhost:3000")
             .body(Body::empty())
             .unwrap();
 
@@ -216,6 +250,7 @@ mod tests {
         let request = Request::builder()
             .method("OPTIONS")
             .uri("/api/graph")
+            .header(HOST, "localhost:3000")
             .header("Origin", "http://localhost:5173")
             .header("Access-Control-Request-Method", "GET")
             .body(Body::empty())
@@ -231,6 +266,7 @@ mod tests {
 
         let request = Request::builder()
             .uri("/nonexistent")
+            .header(HOST, "localhost:3000")
             .body(Body::empty())
             .unwrap();
 
@@ -244,11 +280,89 @@ mod tests {
 
         let request = Request::builder()
             .uri("/api/graph")
+            .header(HOST, "localhost:3000")
             .body(Body::empty())
             .unwrap();
 
         let response = router.oneshot(request).await.unwrap();
         let content_type = response.headers().get("content-type").unwrap();
         assert!(content_type.to_str().unwrap().contains("application/json"));
+    }
+
+    #[tokio::test]
+    async fn rejects_untrusted_authorities_before_api_and_static_routing() {
+        let router = create_router_with_static(test_graph(), Some(std::env::temp_dir()));
+        for path in ["/api/graph", "/health", "/index.html"] {
+            for host in [
+                None,
+                Some("attacker.example:3000"),
+                Some("localhost.attacker.example"),
+                Some("localhost@attacker.example"),
+                Some("attacker@localhost"),
+                Some("localhost:bad"),
+            ] {
+                let mut request = Request::builder().uri(path);
+                if let Some(host) = host {
+                    request = request.header(HOST, host);
+                }
+                let response = router
+                    .clone()
+                    .oneshot(request.body(Body::empty()).unwrap())
+                    .await
+                    .unwrap();
+                assert_eq!(
+                    response.status(),
+                    StatusCode::BAD_REQUEST,
+                    "{path} {host:?}"
+                );
+            }
+        }
+        for request in [
+            Request::builder()
+                .uri("/api/graph")
+                .header(HOST, "localhost")
+                .header(HOST, "attacker.example"),
+            Request::builder()
+                .uri("http://attacker.example/api/graph")
+                .header(HOST, "localhost"),
+            Request::builder()
+                .uri("http://localhost:3000/api/graph")
+                .header(HOST, "localhost:4000"),
+            Request::builder()
+                .method("OPTIONS")
+                .uri("/api/graph")
+                .header(HOST, "attacker.example")
+                .header("Origin", "http://localhost:5173")
+                .header("Access-Control-Request-Method", "GET"),
+        ] {
+            let response = router
+                .clone()
+                .oneshot(request.body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        }
+    }
+
+    #[tokio::test]
+    async fn serves_localhost_and_loopback_on_custom_ports() {
+        for host in [
+            "localhost",
+            "localhost:3000",
+            "LOCALHOST:4000",
+            "127.0.0.1:9000",
+        ] {
+            let response = create_router(test_graph())
+                .oneshot(
+                    Request::builder()
+                        .uri("/api/graph")
+                        .header(HOST, host)
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK, "{host}");
+        }
     }
 }

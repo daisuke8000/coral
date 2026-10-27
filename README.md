@@ -52,7 +52,7 @@ coral diff base.json head.json
 
 `coral` defaults to `--output json`; `-o` also accepts `debug`, `summary`, and `markdown`. Summary counts all services and only top-level message/enum declarations; debug lists per-file descriptor counts. Neither is a graph-node count. Input is limited to 256 MiB while reading. `coral diff` requires two UTF-8 `.json` graph snapshots, each at most 32 MiB, and always prints a Markdown diff.
 
-Without `--static-dir`, `coral serve` exposes only `/api/graph` and `/health`. It binds to `127.0.0.1`, defaults to port 3000 (`-p`/`--port`), and stops gracefully on Ctrl+C. The local API is unauthenticated. Cross-origin access is limited to HTTP localhost/127.0.0.1 origins on ports 3000 and 5173; static files can be served from the same origin on the chosen port.
+Without `--static-dir`, `coral serve` exposes only `/api/graph` and `/health`. It binds to `127.0.0.1`, defaults to port 3000 (`-p`/`--port`), and stops gracefully on Ctrl+C. The local API is unauthenticated. HTTP requests must use `localhost` or `127.0.0.1` as their Host/authority; unknown, missing, malformed, or conflicting authorities are rejected for both API and static routes. Cross-origin access is limited to HTTP localhost/127.0.0.1 origins on ports 3000 and 5173; static files can be served from the same origin on the chosen port.
 
 ### GitHub Action
 
@@ -112,7 +112,7 @@ The Action checks downloaded binary checksums and falls back to building source 
 | `markdown-report` | Detailed markdown report of proto dependencies |
 | `diff-report` | Diff report showing changes from base branch |
 
-The current Action builds the head descriptor once for JSON and Markdown. `json-path` is `coral-output/graph.json`; optional `html-path` is `coral-output/html`. Full analysis remains in `markdown-report`, while PR comments use only `diff-report` and update an existing Coral bot comment when found. Artifacts contain `coral-output` and are retained for one day; Pages generation does not itself deploy the site.
+The current Action builds the head descriptor once for JSON and Markdown. Head/base snapshots are kept privately under `RUNNER_TEMP` during checkout changes. Publication rejects symlinks and special files in `coral-output`; Pages output is replaced on repeated runs. `json-path` is `coral-output/graph.json`; optional `html-path` is `coral-output/html`. Full analysis remains in `markdown-report`, while PR comments use only `diff-report` and update an existing Coral bot comment when found. Artifacts contain `coral-output` and are retained for one day; Pages generation does not itself deploy the site.
 
 ## Deploy to GitHub Pages
 

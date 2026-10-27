@@ -11,6 +11,7 @@ on:
       - 'ui/**'
       - 'sandbox/**'
       - 'action.yml'
+      - 'scripts/**'
       - '.github/workflows/ci.yml'
   pull_request:
     branches: [main]
@@ -21,6 +22,7 @@ on:
       - 'ui/**'
       - 'sandbox/**'
       - 'action.yml'
+      - 'scripts/**'
       - '.github/workflows/ci.yml'
 
 permissions:

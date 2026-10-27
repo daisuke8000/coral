@@ -193,8 +193,11 @@ runs:
         PROTO_PATH: ${{ steps.validate.outputs.proto-path }}
         BUF_CONFIG: ${{ steps.validate.outputs.buf-config }}
         WORKSPACE: ${{ github.workspace }}
+        ACTION_PATH: ${{ github.action_path }}
       run: |
-        mkdir -p "${WORKSPACE}/coral-output"
+        bash "$ACTION_PATH/scripts/prepare-output.sh" "$WORKSPACE"
+        STATE_DIR="$(mktemp -d "${RUNNER_TEMP}/coral-state.XXXXXX")"
+        echo "state-dir=$STATE_DIR" >> "$GITHUB_OUTPUT"
         cd "$PROTO_PATH"
 
         DESCRIPTOR="$(mktemp "${RUNNER_TEMP}/coral-descriptor.XXXXXX")"
@@ -204,7 +207,8 @@ runs:
           BUF_ARGS+=(--config "$BUF_CONFIG")
         fi
         buf build "${BUF_ARGS[@]}" -o - > "$DESCRIPTOR"
-        "$CORAL_BIN" --output json < "$DESCRIPTOR" > "${WORKSPACE}/coral-output/graph.json"
+        "$CORAL_BIN" --output json < "$DESCRIPTOR" > "$STATE_DIR/head.json"
+        cp "$STATE_DIR/head.json" "${WORKSPACE}/coral-output/graph.json"
         MARKDOWN=$("$CORAL_BIN" --output markdown < "$DESCRIPTOR")
 
         echo "json-path=coral-output/graph.json" >> "$GITHUB_OUTPUT"
@@ -223,6 +227,8 @@ runs:
         PROTO_PATH: ${{ inputs.proto-path }}
         BUF_CONFIG: ${{ inputs.buf-config }}
         BASE_REF: ${{ github.base_ref }}
+        ACTION_PATH: ${{ github.action_path }}
+        STATE_DIR: ${{ steps.generate.outputs.state-dir }}
         WORKSPACE: ${{ github.workspace }}
       run: |
         if [[ "$WORKSPACE" == *$'\r'* || "$WORKSPACE" == *$'\n'* ]]; then
@@ -272,19 +278,22 @@ runs:
 
         if [ -n "$BUF_CONFIG" ]; then
           buf build --config "$BUF_CONFIG" -o - | "$CORAL_BIN" --output json > \
-            "${WORKSPACE}/coral-output/base.json"
+            "${STATE_DIR}/base.json"
         else
           buf build -o - | "$CORAL_BIN" --output json > \
-            "${WORKSPACE}/coral-output/base.json"
+            "${STATE_DIR}/base.json"
         fi
 
         cd "$WORKSPACE"
         git -C "$WORKSPACE" checkout "$HEAD_REF"
         trap - EXIT
+        bash "$ACTION_PATH/scripts/prepare-output.sh" "$WORKSPACE"
+        cp "$STATE_DIR/head.json" "$WORKSPACE/coral-output/graph.json"
+        cp "$STATE_DIR/base.json" "$WORKSPACE/coral-output/base.json"
 
         DIFF_REPORT=$("$CORAL_BIN" diff \
-          "${WORKSPACE}/coral-output/base.json" \
-          "${WORKSPACE}/coral-output/graph.json")
+          "${STATE_DIR}/base.json" \
+          "${STATE_DIR}/head.json")
 
         DELIMITER="$(openssl rand -hex 16)"
         {
@@ -314,8 +323,11 @@ runs:
       env:
         ACTION_PATH: ${{ github.action_path }}
       run: |
-        cp -r "${ACTION_PATH}/ui/dist" "coral-output/html"
-        cp "coral-output/graph.json" "coral-output/html/"
+        bash "$ACTION_PATH/scripts/prepare-output.sh" "$GITHUB_WORKSPACE"
+        rm -rf -- "$GITHUB_WORKSPACE/coral-output/html"
+        mkdir -- "$GITHUB_WORKSPACE/coral-output/html"
+        cp -R "${ACTION_PATH}/ui/dist/." "$GITHUB_WORKSPACE/coral-output/html/"
+        cp "$GITHUB_WORKSPACE/coral-output/graph.json" "$GITHUB_WORKSPACE/coral-output/html/"
         echo "html-path=coral-output/html" >> "$GITHUB_OUTPUT"
 
     - name: Post PR Comment
@@ -364,3 +376,12 @@ runs:
         path: coral-output
         retention-days: 1
         overwrite: true
+
+    - name: Remove private snapshots
+      if: always() && steps.generate.outputs.state-dir != ''
+      shell: bash
+      env:
+        STATE_DIR: ${{ steps.generate.outputs.state-dir }}
+      run: |
+        rm -f -- "$STATE_DIR/head.json" "$STATE_DIR/base.json"
+        rmdir -- "$STATE_DIR"
